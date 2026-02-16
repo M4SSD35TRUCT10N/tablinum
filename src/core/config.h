@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include "tablinum.h"
+#include "core/str.h"
 
 #define TBL_CFG_PATH_MAX   1024
 #define TBL_CFG_LISTEN_MAX 128
@@ -15,7 +16,10 @@ typedef struct tbl_cfg_s {
 
     char http_listen[TBL_CFG_LISTEN_MAX];
 
-    unsigned long ingest_poll_seconds;
+    /* ingest */
+    unsigned long ingest_poll_seconds; /* exists already */
+    unsigned long ingest_once;         /* 0|1 */
+    unsigned long ingest_max_jobs;     /* 0 = unlimited */
 } tbl_cfg_t;
 
 void tbl_cfg_defaults(tbl_cfg_t *cfg);
@@ -55,6 +59,8 @@ void tbl_cfg_defaults(tbl_cfg_t *cfg)
     (void)tbl_strlcpy(cfg->http_listen, "0.0.0.0:8080", sizeof(cfg->http_listen));
 
     cfg->ingest_poll_seconds = 2UL;
+    cfg->ingest_once = 0UL;
+    cfg->ingest_max_jobs = 0UL;
 }
 
 typedef struct tbl_cfg_ctx_s {
@@ -125,6 +131,31 @@ static int tbl_cfg_on_kv(void *ud, const char *section, const char *key, const c
             ctx->cfg->ingest_poll_seconds = v;
             return 0;
         }
+
+        if (strcmp(key, "once") == 0) {
+            unsigned long v;
+            if (!tbl_parse_u32(value, &v)) {
+                tbl_cfg_seterr(ctx->err, ctx->errsz, "invalid once");
+                return 1;
+            }
+            if (v > 1UL) {
+                tbl_cfg_seterr(ctx->err, ctx->errsz, "once must be 0 or 1");
+                return 1;
+            }
+            ctx->cfg->ingest_once = v;
+            return 0;
+        }
+
+        if (strcmp(key, "max_jobs") == 0) {
+            unsigned long v;
+            if (!tbl_parse_u32(value, &v)) {
+                tbl_cfg_seterr(ctx->err, ctx->errsz, "invalid max_jobs");
+                return 1;
+            }
+            ctx->cfg->ingest_max_jobs = v;
+            return 0;
+        }
+
         tbl_cfg_seterr(ctx->err, ctx->errsz, "unknown key in [ingest]");
         return 1;
     }

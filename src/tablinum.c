@@ -36,8 +36,15 @@ static int run_ingest(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
     char err[256];
     char name[256];
     unsigned long poll_ms;
+    unsigned long jobs_done;
+    int once;
+    unsigned long max_jobs;
 
     (void)app;
+
+    jobs_done = 0UL;
+    once = (cfg->ingest_once != 0UL) ? 1 : 0;
+    max_jobs = cfg->ingest_max_jobs;
 
     /* resolve spool path */
     spool_root[0] = '\0';
@@ -68,18 +75,20 @@ static int run_ingest(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
         poll_ms = cfg->ingest_poll_seconds * 1000UL;
     }
 
-    tbl_logf(TBL_LOG_INFO, "[ingest] running (spool=%s, poll=%lu ms)", spool_root, poll_ms);
+    tbl_logf(TBL_LOG_INFO, "[ingest] running (spool=%s, poll=%lu ms, once=%d, max_jobs=%lu)", spool_root, poll_ms, once, max_jobs);
 
     for (;;) {
         int rc;
         int should_fail;
-        size_t n;
 
         err[0] = '\0';
         name[0] = '\0';
 
         rc = tbl_spool_claim_next(&sp, name, sizeof(name), err, sizeof(err));
         if (rc == TBL_SPOOL_ENOJOB) {
+            if (once) {
+                break;
+            }
             tbl_sleep_ms(poll_ms);
             continue;
         }
@@ -102,6 +111,11 @@ static int run_ingest(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
                 return 2;
             }
             tbl_logf(TBL_LOG_WARN, "job failed: %s", name);
+
+            jobs_done++;
+            if (max_jobs > 0UL && jobs_done >= max_jobs) {
+                break;
+            }
         } else {
             char meta_name[300];
             char meta_path[1024];
@@ -133,11 +147,17 @@ static int run_ingest(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
             }
 
             tbl_logf(TBL_LOG_INFO, "job ok: %s", name);
+
+            jobs_done++;
+            if (max_jobs > 0UL && jobs_done >= max_jobs) {
+                break;
+            }
         }
     }
 
-    /* not reached */
-    /* return 0; */
+
+    tbl_logf(TBL_LOG_INFO, "[ingest] done (%lu job(s))", jobs_done);
+    return 0;
 }
 
 static int run_index(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
