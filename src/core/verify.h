@@ -88,6 +88,7 @@ int tbl_verify_job(const char *repo_root,
     tbl_record_t rec;
     char objpath[1024];
     char hex[65];
+    char recpath[1024];
     int ex;
     int rc;
 
@@ -95,6 +96,19 @@ int tbl_verify_job(const char *repo_root,
     if (!repo_root || !repo_root[0] || !jobid || !jobid[0]) {
         tbl_verify_seterr(err, errsz, "invalid args");
         return 2;
+    }
+
+
+    /* If the record does not exist yet, treat this as a "not verifiable" state,
+       not a hard error. This is expected before the first ingest run. */
+    if (tbl_record_path(repo_root, jobid, recpath, sizeof(recpath))) {
+        ex = 0;
+        (void)tbl_fs_exists(recpath, &ex);
+        if (!ex) {
+            tbl_verify_seterr(err, errsz, "no record (run ingest first)");
+            (void)tbl_events_append(repo_root, "verify.skip", jobid, "norecord", "", "no record", 0, 0);
+            return 1;
+        }
     }
 
     rc = tbl_record_read_repo(repo_root, jobid, &rec, err, errsz);
