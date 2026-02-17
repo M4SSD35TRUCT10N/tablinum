@@ -27,6 +27,7 @@ static void tbl_usage(const char *prog)
     if (!prog || !prog[0]) prog = TBL_NAME;
 
     printf("%s %s\n", TBL_NAME, TBL_VERSION);
+    printf("Strict C89 single-binary document archive engine (paperless-style).\n");
     printf("Usage:\n");
     printf("  %s [--config FILE] [--role ROLE]\n", prog);
     printf("  %s verify  JOBID [--config FILE]\n", prog);
@@ -34,6 +35,7 @@ static void tbl_usage(const char *prog)
     printf("\n");
     printf("Roles:\n");
     printf("  all | serve | ingest | index | worker | verify | export\n");
+    printf("  (implemented: ingest / verify / export)\n");
     printf("\n");
     printf("Options:\n");
     printf("  --config FILE        Path to INI config (default: tablinum.ini)\n");
@@ -97,6 +99,12 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
 
     got_subcmd = 0;
     prog = (argc > 0 && argv && argv[0]) ? argv[0] : TBL_NAME;
+
+    /* No arguments -> show help (avoid surprising defaults). */
+    if (argc <= 1) {
+        tbl_usage(prog);
+        return 1; /* handled */
+    }
 
     for (i = 1; i < argc; ++i) {
         const char *a;

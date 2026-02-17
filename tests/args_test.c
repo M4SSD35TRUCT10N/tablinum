@@ -17,6 +17,17 @@ static int test_defaults(void)
     char *argv0[] = { (char*)"tablinum" };
     int rc = tbl_args_parse(1, argv0, &app);
 
+    /* No args -> help handled (behavioral polish). */
+    T_ASSERT_EQ_INT(rc, 1);
+    return 0;
+}
+
+static int test_explicit_all_role(void)
+{
+    tbl_app_config_t app;
+    char *argv0[] = { (char*)"tablinum", (char*)"--role", (char*)"all" };
+    int rc = tbl_args_parse(3, argv0, &app);
+
     T_ASSERT_EQ_INT(rc, 0);
     T_ASSERT_STREQ(app.config_path, "tablinum.ini");
     T_ASSERT_EQ_INT(app.role, TBL_ROLE_ALL);
@@ -75,6 +86,7 @@ static int test_export_subcmd(void)
 int main(void)
 {
     T_ASSERT(test_defaults() == 0);
+    T_ASSERT(test_explicit_all_role() == 0);
     T_ASSERT(test_role_and_config() == 0);
     T_ASSERT(test_verify_subcmd() == 0);
     T_ASSERT(test_export_subcmd() == 0);

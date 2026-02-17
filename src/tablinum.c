@@ -96,8 +96,8 @@ static int run_all(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
     (void)app;
     (void)cfg;
 
-    tbl_logf(TBL_LOG_INFO, "[all] TODO");
-    return 0;
+    tbl_logf(TBL_LOG_ERROR, "[all] not implemented yet");
+    return 2;
 }
 
 static int run_serve(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
@@ -105,15 +105,13 @@ static int run_serve(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
     (void)app;
     (void)cfg;
 
-    tbl_logf(TBL_LOG_INFO, "[serve] TODO (listen=%s)", cfg->http_listen);
-    return 0;
+    tbl_logf(TBL_LOG_ERROR, "[serve] not implemented yet (listen=%s)", cfg->http_listen);
+    return 2;
 }
 
 static int run_ingest(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
 {
     char err[256];
-    char name[256];
-    unsigned long poll_ms;
     unsigned long jobs_done;
 
     (void)app;
@@ -138,8 +136,8 @@ static int run_index(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
     (void)app;
     (void)cfg;
 
-    tbl_logf(TBL_LOG_INFO, "[index] TODO (db=%s)", cfg->db);
-    return 0;
+    tbl_logf(TBL_LOG_ERROR, "[index] not implemented yet (db=%s)", cfg->db);
+    return 2;
 }
 
 static int run_worker(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
@@ -147,8 +145,8 @@ static int run_worker(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
     (void)app;
     (void)cfg;
 
-    tbl_logf(TBL_LOG_INFO, "[worker] TODO");
-    return 0;
+    tbl_logf(TBL_LOG_ERROR, "[worker] not implemented yet");
+    return 2;
 }
 
 int main(int argc, char **argv)

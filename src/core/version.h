@@ -9,11 +9,24 @@
 #define TBL_VERSION_MINOR 1
 #define TBL_VERSION_PATCH 4
 
-/* Pre-release tag (set to "" for release builds) */
+/* Pre-release tag (set to "" for release builds).
+   You may override from the build system via -DTBL_VERSION_SUFFIX="\"-dev\"" etc. */
+#ifndef TBL_VERSION_SUFFIX
 #define TBL_VERSION_SUFFIX "-dev"
+#endif
+
+/* Optional build metadata (SemVer build: "+..."), e.g. "+g<hash>".
+   Override via -DTBL_BUILD_META="\"+gabcdef0\"" or leave empty. */
+#ifndef TBL_BUILD_META
+#define TBL_BUILD_META ""
+#endif
+
+/* stringify helpers */
+#define TBL__STR(x) #x
+#define TBL__XSTR(x) TBL__STR(x)
 
 /* Convenience strings */
-#define TBL_VERSION_BASE "0.1.4"
-#define TBL_VERSION      TBL_VERSION_BASE TBL_VERSION_SUFFIX
+#define TBL_VERSION_BASE TBL__XSTR(TBL_VERSION_MAJOR) "." TBL__XSTR(TBL_VERSION_MINOR) "." TBL__XSTR(TBL_VERSION_PATCH)
+#define TBL_VERSION      TBL_VERSION_BASE TBL_VERSION_SUFFIX TBL_BUILD_META
 
 #endif /* TBL_VERSION_H */

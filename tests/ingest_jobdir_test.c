@@ -27,6 +27,13 @@
 #define TBL_SPOOL_IMPLEMENTATION
 #include "core/spool.h"
 
+/* ingest depends on record + events; keep this test self-contained */
+#define TBL_RECORD_IMPLEMENTATION
+#include "core/record.h"
+
+#define TBL_EVENTS_IMPLEMENTATION
+#include "core/events.h"
+
 #define TBL_INGEST_IMPLEMENTATION
 #include "core/ingest.h"
 

@@ -8,7 +8,16 @@ Goal: a durable document store that can still be compiled and read decades from 
 
 ## Quick start
 
+> **DE:** Aktuell ist der Kern‑Workflow **ingest / verify / export** implementiert.
+> Andere Rollen sind Platzhalter und schlagen derzeit fail‑fast mit „not implemented yet“ fehl.
+>
+> **EN:** At this stage, the implemented core workflow is **ingest / verify / export**.
+> Other roles are placeholders and currently fail-fast with “not implemented yet”.
+
 ```sh
+# show CLI help
+tablinum --help
+
 # ingest jobs (polling)
 tablinum --config tablinum.ini --role ingest
 
