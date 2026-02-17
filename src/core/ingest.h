@@ -4,11 +4,13 @@
 #include <stddef.h>
 #include "core/config.h"
 
-/* Ingest role (jobdir + CAS, SIP-light -> AIP-light):
+/* Ingest role (SIP-light jobdir -> AIP-light CAS + records):
    - claims next DIRECTORY from spool/inbox -> spool/claim
    - requires: <jobdir>/payload.bin
    - stores payload in repo CAS (sha256)
    - writes <jobdir>/job.meta (moves with directory)
+   - writes <repo>/records/<jobid>.ini (durable record)
+   - appends to <repo>/events.log
    - commits jobdir to spool/out or spool/fail
 
    jobs_done counts ok + fail.
@@ -23,13 +25,17 @@ int tbl_ingest_run(const tbl_cfg_t *cfg, char *err, size_t errsz);
 
 #ifdef TBL_INGEST_IMPLEMENTATION
 
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "core/safe.h"
 #include "core/str.h"
 #include "core/path.h"
 #include "core/spool.h"
 #include "core/cas.h"
+#include "core/record.h"
+#include "core/events.h"
 #include "os/fs.h"
 #include "os/time.h"
 
@@ -50,6 +56,27 @@ static int tbl_ingest_resolve_root(char *out, size_t outsz, const char *root, co
         return 1;
     }
     return tbl_path_join2(out, outsz, root, path_rel_or_abs);
+}
+
+static unsigned long tbl_ingest_file_size_ul(const char *path)
+{
+    FILE *fp;
+    long n;
+
+    if (!path || !path[0]) return 0UL;
+
+    fp = fopen(path, "rb");
+    if (!fp) return 0UL;
+
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return 0UL;
+    }
+    n = ftell(fp);
+    fclose(fp);
+
+    if (n < 0) return 0UL;
+    return (unsigned long)n;
 }
 
 static int tbl_ingest_write_job_meta(const char *jobdir,
@@ -137,6 +164,30 @@ static int tbl_ingest_commit_fail(tbl_spool_t *sp, const char *jobid, char *err,
     return 0;
 }
 
+static void tbl_ingest_fill_record(tbl_record_t *rec,
+                                  const char *jobid,
+                                  const char *status,
+                                  const char *payload_name,
+                                  const char *sha256_or_empty,
+                                  unsigned long bytes,
+                                  const char *reason_or_empty)
+{
+    unsigned long ts;
+
+    (void)memset(rec, 0, sizeof(*rec));
+
+    (void)tbl_strlcpy(rec->job, jobid ? jobid : "", sizeof(rec->job));
+    (void)tbl_strlcpy(rec->status, status ? status : "unknown", sizeof(rec->status));
+    (void)tbl_strlcpy(rec->payload, payload_name ? payload_name : "", sizeof(rec->payload));
+    (void)tbl_strlcpy(rec->sha256, sha256_or_empty ? sha256_or_empty : "", sizeof(rec->sha256));
+
+    rec->bytes = bytes;
+    ts = (unsigned long)time(0);
+    rec->stored_at = ts;
+
+    if (reason_or_empty) (void)tbl_strlcpy(rec->reason, reason_or_empty, sizeof(rec->reason));
+}
+
 int tbl_ingest_run_ex(const tbl_cfg_t *cfg,
                       unsigned long *out_jobs_done,
                       char *err, size_t errsz)
@@ -173,6 +224,11 @@ int tbl_ingest_run_ex(const tbl_cfg_t *cfg,
         return 2;
     }
 
+    if (tbl_fs_mkdir_p(repo_root) != 0) {
+        tbl_ingest_seterr(err, errsz, "cannot create repo root");
+        return 2;
+    }
+
     if (tbl_spool_init(&sp, spool_root, err, errsz) != TBL_SPOOL_OK) {
         if (err && errsz && err[0] == '\0') tbl_ingest_seterr(err, errsz, "spool init failed");
         return 2;
@@ -191,11 +247,13 @@ int tbl_ingest_run_ex(const tbl_cfg_t *cfg,
         int rc;
         int ex;
         char sha[65];
+        unsigned long bytes;
+        tbl_record_t rec;
 
         if (err && errsz) err[0] = '\0';
         name[0] = '\0';
 
-        /* IMPORTANT: claim DIRECTORY jobs (jobid is directory name) */
+        /* claim DIRECTORY jobs (jobid is directory name) */
         rc = tbl_spool_claim_next_dir(&sp, name, sizeof(name), err, errsz);
         if (rc == TBL_SPOOL_ENOJOB) {
             if (once) break;
@@ -224,6 +282,11 @@ int tbl_ingest_run_ex(const tbl_cfg_t *cfg,
         if (!ex) {
             /* missing payload -> fail */
             (void)tbl_ingest_write_job_meta(jobdir, "fail", name, "payload.bin", "", "missing payload.bin", err, errsz);
+
+            tbl_ingest_fill_record(&rec, name, "fail", "payload.bin", "", 0UL, "missing payload.bin");
+            (void)tbl_record_write_repo(repo_root, &rec, 0, 0);
+            (void)tbl_events_append(repo_root, "ingest.fail", name, "fail", "", "missing payload.bin", 0, 0);
+
             if (tbl_ingest_commit_fail(&sp, name, err, errsz) != 0) return 2;
 
             jobs_done++;
@@ -231,9 +294,16 @@ int tbl_ingest_run_ex(const tbl_cfg_t *cfg,
             continue;
         }
 
+        bytes = tbl_ingest_file_size_ul(payload);
+
         sha[0] = '\0';
         if (tbl_cas_put_file(repo_root, payload, sha, sizeof(sha), err, errsz) != 0) {
             (void)tbl_ingest_write_job_meta(jobdir, "fail", name, "payload.bin", "", err && err[0] ? err : "cas put failed", err, errsz);
+
+            tbl_ingest_fill_record(&rec, name, "fail", "payload.bin", "", bytes, err && err[0] ? err : "cas put failed");
+            (void)tbl_record_write_repo(repo_root, &rec, 0, 0);
+            (void)tbl_events_append(repo_root, "ingest.fail", name, "fail", "", rec.reason, 0, 0);
+
             if (tbl_ingest_commit_fail(&sp, name, err, errsz) != 0) return 2;
 
             jobs_done++;
@@ -243,13 +313,20 @@ int tbl_ingest_run_ex(const tbl_cfg_t *cfg,
 
         if (tbl_ingest_write_job_meta(jobdir, "ok", name, "payload.bin", sha, "", err, errsz) != 0) {
             /* try to move to fail to avoid clogging claim */
+            (void)tbl_events_append(repo_root, "ingest.error", name, "error", sha, "job.meta write failed", 0, 0);
             (void)tbl_ingest_commit_fail(&sp, name, err, errsz);
             return 2;
         }
 
+        /* durable record + event */
+        tbl_ingest_fill_record(&rec, name, "ok", "payload.bin", sha, bytes, "");
+        (void)tbl_record_write_repo(repo_root, &rec, 0, 0);
+        (void)tbl_events_append(repo_root, "ingest.ok", name, "ok", sha, "", 0, 0);
+
         rc = tbl_spool_commit_out(&sp, name, err, errsz);
         if (rc != TBL_SPOOL_OK) {
             if (err && errsz && err[0] == '\0') tbl_ingest_seterr(err, errsz, "commit_out failed");
+            (void)tbl_events_append(repo_root, "ingest.error", name, "error", sha, "commit_out failed", 0, 0);
             return 2;
         }
 

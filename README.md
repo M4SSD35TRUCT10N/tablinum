@@ -6,6 +6,19 @@ Ziel: langlebige, in Jahrzehnten noch kompilier- und lesbare Dokumentenablage (W
 **EN:** Tablinum is a strict C89, portable *document hub* (paperless‑style) as a **single binary**.  
 Goal: a durable document store that can still be compiled and read decades from now (Windows, Linux/RPi, 9front), using a **fail‑fast** secure C style. Build/tests are driven by **tack**.
 
+## Quick start
+
+```sh
+# ingest jobs (polling)
+tablinum --config tablinum.ini --role ingest
+
+# verify a stored job by recomputing SHA-256 from CAS
+tablinum verify JOBID
+
+# export payload + record to a directory
+tablinum export JOBID ./export_dir
+```
+
 ---
 
 ## Deutsch (DE)
@@ -20,11 +33,18 @@ Im übertragenen Sinn ist Tablinum genau das: ein „repräsentativer Knotenpunk
 
 ### Status
 
-Frühe Bootstrap‑Phase:
+Frühe Bootstrap‑Phase (aber schon funktionsfähig für den Kern‑Workflow):
 
-- strikte C89‑Core‑Utilities
-- robuste Spool/Claim‑Queue
-- Ingest‑Role (Polling) bewegt Jobs von `inbox` → `claim` → `out`/`fail` und schreibt eine `.meta`‑Sidecar‑Datei
+- strikte C89‑Core‑Utilities (`str`, `safe`, `path`, …)
+- robuste Spool/Claim‑Queue (Job‑Verzeichnisse)
+- Ingest‑Role: `inbox` → `claim` → `out`/`fail`
+- Fixity: SHA‑256
+- CAS: Payload wird in `repo/objects/<sha256>` abgelegt
+- Durable Records: `repo/records/<jobid>.ini`
+- Audit‑Trail: append‑only `repo/events.log`
+- Verify: `tablinum verify <jobid>` (recompute + compare)
+- Export: `tablinum export <jobid> <dir>` (DIP‑light)
+
 
 ### Ziele
 
@@ -117,11 +137,17 @@ In that sense, Tablinum is a controlled “hub” between the entrance (ingest) 
 
 ### Status
 
-Early bootstrap:
+Early bootstrap phase (but the core workflow already works):
 
-- strict C89 core utilities
-- robust spool/claim queue
-- ingest role (polling) moves jobs from `inbox` → `claim` → `out`/`fail` and writes a `.meta` sidecar
+- strict C89 core utilities (`str`, `safe`, `path`, ...)
+- robust spool/claim queue (job directories)
+- ingest role: `inbox` → `claim` → `out`/`fail`
+- fixity: SHA‑256
+- CAS: payload stored as `repo/objects/<sha256>`
+- durable records: `repo/records/<jobid>.ini`
+- audit trail: append‑only `repo/events.log`
+- verify: `tablinum verify <jobid>` (recompute + compare)
+- export: `tablinum export <jobid> <dir>` (DIP‑light)
 
 ### Goals
 

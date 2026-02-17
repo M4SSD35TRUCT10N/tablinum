@@ -12,9 +12,11 @@ static void tbl_usage(const char *prog)
     printf("%s %s\n", TBL_NAME, TBL_VERSION);
     printf("Usage:\n");
     printf("  %s [--config FILE] [--role ROLE]\n", prog);
+    printf("  %s verify  JOBID [--config FILE]\n", prog);
+    printf("  %s export  JOBID OUTDIR [--config FILE]\n", prog);
     printf("\n");
     printf("Roles:\n");
-    printf("  all | serve | ingest | index | worker\n");
+    printf("  all | serve | ingest | index | worker | verify | export\n");
     printf("\n");
     printf("Options:\n");
     printf("  --config FILE        Path to INI config (default: tablinum.ini)\n");
@@ -23,6 +25,7 @@ static void tbl_usage(const char *prog)
     printf("  -h, --help           This help\n");
 }
 
+/* role names are case-sensitive on purpose (strict). */
 static int tbl_role_from_str(const char *s, tbl_role_t *out)
 {
     if (!s || !out) return 0;
@@ -32,6 +35,8 @@ static int tbl_role_from_str(const char *s, tbl_role_t *out)
     if (strcmp(s, "ingest") == 0) { *out = TBL_ROLE_INGEST; return 1; }
     if (strcmp(s, "index") == 0)  { *out = TBL_ROLE_INDEX; return 1; }
     if (strcmp(s, "worker") == 0) { *out = TBL_ROLE_WORKER; return 1; }
+    if (strcmp(s, "verify") == 0) { *out = TBL_ROLE_VERIFY; return 1; }
+    if (strcmp(s, "export") == 0) { *out = TBL_ROLE_EXPORT; return 1; }
 
     return 0;
 }
@@ -50,10 +55,17 @@ static const char *tbl_match_kv(const char *arg, const char *key)
     return arg + klen + 1;
 }
 
+static int tbl_is_option(const char *a)
+{
+    if (!a || !a[0]) return 0;
+    return (a[0] == '-');
+}
+
 int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
 {
     int i;
     const char *prog;
+    int got_subcmd;
 
     if (!cfg) {
         /* Programmer error: hard fail in debug mentality, but return error here to stay standalone. */
@@ -63,6 +75,10 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
 
     cfg->config_path = "tablinum.ini";
     cfg->role = TBL_ROLE_ALL;
+    cfg->jobid = NULL;
+    cfg->out_dir = NULL;
+
+    got_subcmd = 0;
 
     prog = (argc > 0 && argv && argv[0]) ? argv[0] : TBL_NAME;
 
@@ -83,14 +99,9 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
             return 1; /* handled */
         }
 
-        /* end of options marker */
+        /* end of options marker: remaining args are positional/subcommand */
         if (strcmp(a, "--") == 0) {
-            /* No positional args supported (strict). */
-            if (i + 1 < argc) {
-                fprintf(stderr, "error: unexpected positional argument: %s\n", argv[i + 1]);
-                fprintf(stderr, "hint: use --help\n");
-                return 2;
-            }
+            i++;
             break;
         }
 
@@ -154,10 +165,87 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
             continue;
         }
 
+        /* Non-option token (subcommand/positional). */
+        if (!tbl_is_option(a)) {
+            /* allow "verify" / "export" as subcommand */
+            if (!got_subcmd && (strcmp(a, "verify") == 0 || strcmp(a, "export") == 0)) {
+                got_subcmd = 1;
+                if (!tbl_role_from_str(a, &cfg->role)) {
+                    fprintf(stderr, "error: unknown subcommand: %s\n", a);
+                    return 2;
+                }
+                continue;
+            }
+
+            /* positional args for verify/export */
+            if (cfg->role == TBL_ROLE_VERIFY) {
+                if (!cfg->jobid) {
+                    cfg->jobid = a;
+                    continue;
+                }
+            } else if (cfg->role == TBL_ROLE_EXPORT) {
+                if (!cfg->jobid) {
+                    cfg->jobid = a;
+                    continue;
+                }
+                if (!cfg->out_dir) {
+                    cfg->out_dir = a;
+                    continue;
+                }
+            }
+
+            /* anything else is an error (strict) */
+            fprintf(stderr, "error: unexpected positional argument: %s\n", a);
+            fprintf(stderr, "hint: use --help\n");
+            return 2;
+        }
+
         /* Strict: no unknown arguments allowed */
         fprintf(stderr, "error: unknown argument: %s\n", a);
         fprintf(stderr, "hint: use --help\n");
         return 2;
+    }
+
+    /* If we broke out via "--", parse remaining as pure positional */
+    for (; i < argc; ++i) {
+        const char *a = argv[i];
+        if (!a || !a[0]) continue;
+
+        if (!got_subcmd && (strcmp(a, "verify") == 0 || strcmp(a, "export") == 0)) {
+            got_subcmd = 1;
+            if (!tbl_role_from_str(a, &cfg->role)) {
+                fprintf(stderr, "error: unknown subcommand: %s\n", a);
+                return 2;
+            }
+            continue;
+        }
+
+        if (cfg->role == TBL_ROLE_VERIFY) {
+            if (!cfg->jobid) { cfg->jobid = a; continue; }
+        } else if (cfg->role == TBL_ROLE_EXPORT) {
+            if (!cfg->jobid) { cfg->jobid = a; continue; }
+            if (!cfg->out_dir) { cfg->out_dir = a; continue; }
+        }
+
+        fprintf(stderr, "error: unexpected positional argument: %s\n", a);
+        fprintf(stderr, "hint: use --help\n");
+        return 2;
+    }
+
+    /* Validate required positional args */
+    if (cfg->role == TBL_ROLE_VERIFY) {
+        if (!cfg->jobid || !cfg->jobid[0]) {
+            fprintf(stderr, "error: verify needs JOBID\n");
+            fprintf(stderr, "hint: %s verify JOBID\n", prog);
+            return 2;
+        }
+    }
+    if (cfg->role == TBL_ROLE_EXPORT) {
+        if (!cfg->jobid || !cfg->jobid[0] || !cfg->out_dir || !cfg->out_dir[0]) {
+            fprintf(stderr, "error: export needs JOBID and OUTDIR\n");
+            fprintf(stderr, "hint: %s export JOBID OUTDIR\n", prog);
+            return 2;
+        }
     }
 
     return 0;

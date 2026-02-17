@@ -11,13 +11,19 @@ typedef enum tbl_role_e {
     TBL_ROLE_SERVE,
     TBL_ROLE_INGEST,
     TBL_ROLE_INDEX,
-    TBL_ROLE_WORKER
+    TBL_ROLE_WORKER,
+    TBL_ROLE_VERIFY,
+    TBL_ROLE_EXPORT
 } tbl_role_t;
 
-/* Runtime config (later: loaded from INI) */
+/* CLI/Runtime config (loaded by args.c, then INI via core/config.c) */
 typedef struct tbl_app_config_s {
     const char *config_path; /* INI path */
     tbl_role_t role;         /* selected role */
+
+    /* Optional positional args (used by verify/export roles) */
+    const char *jobid;       /* verify/export: job id (job directory name) */
+    const char *out_dir;     /* export: output directory */
 } tbl_app_config_t;
 
 #endif /* TABLINUM_H */
