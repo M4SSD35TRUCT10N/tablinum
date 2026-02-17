@@ -21,11 +21,15 @@ enum {
 /* Initialize spool dirs: root + {inbox,claim,out,fail}. Creates as needed. */
 int tbl_spool_init(tbl_spool_t *sp, const char *root, char *err, size_t errsz);
 
-/* Claim next job from inbox -> claim (atomic rename). Returns OK or ENOJOB. */
+/* Claim next *file* from inbox -> claim (atomic rename). Returns OK or ENOJOB. */
 int tbl_spool_claim_next(tbl_spool_t *sp, char *out_name, size_t out_namesz,
                          char *err, size_t errsz);
 
-/* Move claimed job to out/fail (claim -> out/fail). */
+/* Claim next *directory* from inbox -> claim (atomic rename). Returns OK or ENOJOB. */
+int tbl_spool_claim_next_dir(tbl_spool_t *sp, char *out_name, size_t out_namesz,
+                             char *err, size_t errsz);
+
+/* Move claimed job to out/fail (claim -> out/fail). Works for files and directories. */
 int tbl_spool_commit_out(tbl_spool_t *sp, const char *name, char *err, size_t errsz);
 int tbl_spool_commit_fail(tbl_spool_t *sp, const char *name, char *err, size_t errsz);
 
@@ -80,6 +84,7 @@ typedef struct tbl_spool_claim_ctx_s {
     char *out_name;
     size_t out_namesz;
     int claimed;
+    int want_dir;  /* 1: accept directories, 0: accept files */
     char *err;
     size_t errsz;
 } tbl_spool_claim_ctx_t;
@@ -93,15 +98,21 @@ static int tbl_spool_claim_cb(void *ud, const char *name, const char *fullpath, 
     if (!ctx || !ctx->sp) return 1;
 
     if (ctx->claimed) return 1;
-    if (is_dir) return 0;
     if (!name || !name[0]) return 0;
+
+    /* Filter: file vs directory */
+    if (ctx->want_dir) {
+        if (!is_dir) return 0;
+    } else {
+        if (is_dir) return 0;
+    }
 
     if (!tbl_path_join2(dst, sizeof(dst), ctx->sp->claim, name)) {
         tbl_spool_seterr(ctx->err, ctx->errsz, "claim path too long");
         return 1;
     }
 
-    /* Claim by atomic-ish rename */
+    /* Claim by atomic-ish rename (works for files and directories) */
     if (tbl_fs_rename_atomic(fullpath, dst, 0) == 0) {
         if (ctx->out_name && ctx->out_namesz) {
             if (tbl_strlcpy(ctx->out_name, name, ctx->out_namesz) >= ctx->out_namesz) {
@@ -116,7 +127,8 @@ static int tbl_spool_claim_cb(void *ud, const char *name, const char *fullpath, 
     return 0; /* continue */
 }
 
-int tbl_spool_claim_next(tbl_spool_t *sp, char *out_name, size_t out_namesz,
+static int tbl_spool_claim_next_impl(tbl_spool_t *sp, int want_dir,
+                                     char *out_name, size_t out_namesz,
                          char *err, size_t errsz)
 {
     tbl_spool_claim_ctx_t ctx;
@@ -128,6 +140,7 @@ int tbl_spool_claim_next(tbl_spool_t *sp, char *out_name, size_t out_namesz,
     ctx.out_name = out_name;
     ctx.out_namesz = out_namesz;
     ctx.claimed = 0;
+    ctx.want_dir = want_dir;
     ctx.err = err;
     ctx.errsz = errsz;
 
@@ -143,6 +156,18 @@ int tbl_spool_claim_next(tbl_spool_t *sp, char *out_name, size_t out_namesz,
     }
 
     return TBL_SPOOL_OK;
+}
+
+int tbl_spool_claim_next(tbl_spool_t *sp, char *out_name, size_t out_namesz,
+                         char *err, size_t errsz)
+{
+    return tbl_spool_claim_next_impl(sp, 0, out_name, out_namesz, err, errsz);
+}
+
+int tbl_spool_claim_next_dir(tbl_spool_t *sp, char *out_name, size_t out_namesz,
+                             char *err, size_t errsz)
+{
+    return tbl_spool_claim_next_impl(sp, 1, out_name, out_namesz, err, errsz);
 }
 
 static int tbl_spool_move_claimed(tbl_spool_t *sp, const char *name, const char *dst_dir,

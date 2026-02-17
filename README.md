@@ -66,6 +66,14 @@ tack test debug -j 8
 tack test release -j 8
 ```
 
+### Version
+
+Version anzeigen:
+
+```bat
+tablinum --version
+```
+
 ### Starten
 
 #### Ingest (Spool‑Queue)
@@ -153,6 +161,14 @@ tack --config .\tack.ini build release
 ```bat
 tack test debug -j 8
 tack test release -j 8
+```
+
+### Version
+
+Show version:
+
+```bat
+tablinum --version
 ```
 
 ### Run
