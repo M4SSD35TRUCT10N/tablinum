@@ -27,6 +27,7 @@ int tbl_export_job(const char *repo_root,
 #include "core/cas.h"
 #include "core/record.h"
 #include "core/events.h"
+#include "core/sha256.h"
 #include "os/fs.h"
 
 static void tbl_export_seterr(char *err, size_t errsz, const char *msg)
@@ -80,6 +81,90 @@ static int tbl_export_copy_file(const char *src, const char *dst, char *err, siz
     return 0;
 }
 
+static int tbl_export_hash_file_hex(const char *path, char out_hex[65], char *err, size_t errsz)
+{
+    FILE *fp;
+    unsigned char buf[16384];
+    size_t rd;
+    tbl_sha256_t st;
+    unsigned char dig[32];
+
+    if (!out_hex) {
+        tbl_export_seterr(err, errsz, "invalid args");
+        return 2;
+    }
+    out_hex[0] = '\0';
+
+    if (!path || !path[0]) {
+        tbl_export_seterr(err, errsz, "invalid args");
+        return 2;
+    }
+
+    fp = fopen(path, "rb");
+    if (!fp) {
+        tbl_export_seterr(err, errsz, "cannot open input");
+        return 2;
+    }
+
+    tbl_sha256_init(&st);
+    for (;;) {
+        rd = fread(buf, 1, sizeof(buf), fp);
+        if (rd > 0) tbl_sha256_update(&st, buf, rd);
+        if (rd < sizeof(buf)) {
+            if (ferror(fp)) {
+                fclose(fp);
+                tbl_export_seterr(err, errsz, "read error");
+                return 2;
+            }
+            break;
+        }
+    }
+    fclose(fp);
+
+    tbl_sha256_final(&st, dig);
+    if (!tbl_sha256_hex(dig, out_hex, 65)) {
+        tbl_export_seterr(err, errsz, "hex buffer too small");
+        return 2;
+    }
+    return 0;
+}
+
+static int tbl_export_write_manifest(const char *manifest_path,
+                                    const char *payload_name,
+                                    const char payload_sha[65],
+                                    const char record_sha[65],
+                                    char *err, size_t errsz)
+{
+    FILE *fp;
+
+    if (!manifest_path || !manifest_path[0] || !payload_name || !payload_name[0] ||
+        !payload_sha || !payload_sha[0] || !record_sha || !record_sha[0]) {
+        tbl_export_seterr(err, errsz, "invalid args");
+        return 2;
+    }
+
+    fp = fopen(manifest_path, "wb");
+    if (!fp) {
+        tbl_export_seterr(err, errsz, "cannot create manifest");
+        return 2;
+    }
+
+    /* sha256sum-compatible: <hex><two spaces><relative path> */
+    if (fprintf(fp, "%s  %s\n", payload_sha, payload_name) < 0 ||
+        fprintf(fp, "%s  record.ini\n", record_sha) < 0) {
+        fclose(fp);
+        tbl_export_seterr(err, errsz, "manifest write error");
+        return 2;
+    }
+
+    if (fclose(fp) != 0) {
+        tbl_export_seterr(err, errsz, "manifest flush error");
+        return 2;
+    }
+
+    return 0;
+}
+
 int tbl_export_job(const char *repo_root,
                    const char *jobid,
                    const char *out_dir,
@@ -89,7 +174,10 @@ int tbl_export_job(const char *repo_root,
     char objpath[1024];
     char out_payload[1024];
     char out_record[1024];
+    char out_manifest[1024];
     char record_path[1024];
+    char payload_sha[65];
+    char record_sha[65];
     int rc;
     int ex;
 
@@ -157,6 +245,35 @@ int tbl_export_job(const char *repo_root,
     rc = tbl_export_copy_file(record_path, out_record, err, errsz);
     if (rc != 0) {
         (void)tbl_events_append(repo_root, "export.error", jobid, "error", rec.sha256, err && err[0] ? err : "copy record failed", 0, 0);
+        return 2;
+    }
+
+    /* manifest (DIP-light integrity): sha256sum-compatible list of exported files */
+    if (!tbl_path_join2(out_manifest, sizeof(out_manifest), out_dir, "manifest-sha256.txt")) {
+        tbl_export_seterr(err, errsz, "manifest output path too long");
+        (void)tbl_events_append(repo_root, "export.error", jobid, "error", rec.sha256, "manifest output path too long", 0, 0);
+        return 2;
+    }
+
+    /* hash exported files to ensure copy integrity (fail-fast) */
+    rc = tbl_export_hash_file_hex(out_payload, payload_sha, err, errsz);
+    if (rc != 0) {
+        (void)tbl_events_append(repo_root, "export.error", jobid, "error", rec.sha256, err && err[0] ? err : "hash payload failed", 0, 0);
+        return 2;
+    }
+    rc = tbl_export_hash_file_hex(out_record, record_sha, err, errsz);
+    if (rc != 0) {
+        (void)tbl_events_append(repo_root, "export.error", jobid, "error", rec.sha256, err && err[0] ? err : "hash record failed", 0, 0);
+        return 2;
+    }
+
+    rc = tbl_export_write_manifest(out_manifest,
+                                  rec.payload[0] ? rec.payload : "payload.bin",
+                                  payload_sha,
+                                  record_sha,
+                                  err, errsz);
+    if (rc != 0) {
+        (void)tbl_events_append(repo_root, "export.error", jobid, "error", rec.sha256, err && err[0] ? err : "manifest write failed", 0, 0);
         return 2;
     }
 
