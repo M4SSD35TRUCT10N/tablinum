@@ -104,17 +104,35 @@ Start:
 tablinum --config tablinum.ini --role ingest
 ```
 
+#### Verify (Fixity)
+
+```bat
+tablinum verify JOBID --config tablinum.ini
+```
+
+#### Export (Payload + Record)
+
+```bat
+tablinum export JOBID OUTDIR --config tablinum.ini
+```
+
 Jobs in die Inbox legen:
 
 ```bat
-echo hello > spool\inbox\job1.txt
-echo fail  > spool\inbox\job2.bad
+mkdir spool\inbox\job1
+mkdir spool\inbox\job2
+
+echo hello > spool\inbox\job1\payload.bin
+rem optional metadata (INI):
+echo [job] > spool\inbox\job1\job.meta
+
+echo fail  > spool\inbox\job2\payload.bin
 ```
 
 Verhalten:
 
-- `job1.txt` wird geclaimt, nach `spool/out/` verschoben und bekommt `job1.txt.meta`
-- `job2.bad` wird nach `spool/fail/` verschoben
+- `job1/` wird geclaimt, verarbeitet und im Repository als CAS + `records/<jobid>.ini` + `events.log` abgelegt; danach nach `spool/out/` verschoben
+- `job2/` wird nach `spool/fail/` verschoben
 
 Spool‑Layout:
 
@@ -207,17 +225,35 @@ Start ingest:
 tablinum --config tablinum.ini --role ingest
 ```
 
+#### Verify (fixity)
+
+```bat
+tablinum verify JOBID --config tablinum.ini
+```
+
+#### Export (payload + record)
+
+```bat
+tablinum export JOBID OUTDIR --config tablinum.ini
+```
+
 Drop files into the inbox:
 
 ```bat
-echo hello > spool\inbox\job1.txt
-echo fail  > spool\inbox\job2.bad
+mkdir spool\inbox\job1
+mkdir spool\inbox\job2
+
+echo hello > spool\inbox\job1\payload.bin
+rem optional metadata (INI):
+echo [job] > spool\inbox\job1\job.meta
+
+echo fail  > spool\inbox\job2\payload.bin
 ```
 
 Behavior:
 
-- `job1.txt` will be claimed, moved to `spool/out/` and gets a `job1.txt.meta` sidecar
-- `job2.bad` will be moved to `spool/fail/`
+- `job1/` will be claimed, processed and recorded as CAS + `records/<jobid>.ini` + `events.log`; then moved to `spool/out/`
+- `job2/` will be moved to `spool/fail/`
 
 Spool layout:
 
