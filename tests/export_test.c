@@ -70,6 +70,55 @@ static int read3(const char *path, char out3[4])
     return 1;
 }
 
+static int hash_file_hex(const char *path, char out_hex[65])
+{
+    FILE *fp;
+    unsigned char buf[16384];
+    size_t rd;
+    tbl_sha256_t st;
+    unsigned char dig[32];
+
+    if (!path || !path[0] || !out_hex) return 0;
+    out_hex[0] = '\0';
+
+    fp = fopen(path, "rb");
+    if (!fp) return 0;
+
+    tbl_sha256_init(&st);
+    for (;;) {
+        rd = fread(buf, 1, sizeof(buf), fp);
+        if (rd > 0) tbl_sha256_update(&st, buf, rd);
+        if (rd < sizeof(buf)) {
+            if (ferror(fp)) {
+                fclose(fp);
+                return 0;
+            }
+            break;
+        }
+    }
+    fclose(fp);
+    tbl_sha256_final(&st, dig);
+    if (!tbl_sha256_hex(dig, out_hex, 65)) return 0;
+    return 1;
+}
+
+static int read_all(const char *path, char *buf, size_t bufsz)
+{
+    FILE *fp;
+    size_t n;
+
+    if (!path || !path[0] || !buf || bufsz == 0) return 0;
+    buf[0] = '\0';
+
+    fp = fopen(path, "rb");
+    if (!fp) return 0;
+
+    n = fread(buf, 1, bufsz - 1, fp);
+    fclose(fp);
+    buf[n] = '\0';
+    return 1;
+}
+
 int main(void)
 {
     tbl_cfg_t cfg;
@@ -80,10 +129,15 @@ int main(void)
     char outdir[512];
     char outpayload[1024];
     char outrecord[1024];
+    char outmanifest[1024];
     char err[256];
     char repo_root[512];
     int ex;
     char got[4];
+    char sha_payload[65];
+    char sha_record[65];
+    char manifest[2048];
+    char needle[256];
 
     T_ASSERT(mk_tmp_base(base, sizeof(base)) == 1);
 
@@ -126,6 +180,25 @@ int main(void)
 
     T_ASSERT(tbl_path_join2(outrecord, sizeof(outrecord), outdir, "record.ini") == 1);
     ex = 0; (void)tbl_fs_exists(outrecord, &ex); T_ASSERT(ex == 1);
+
+    /* verify manifest exists and matches exported files */
+    T_ASSERT(tbl_path_join2(outmanifest, sizeof(outmanifest), outdir, "manifest-sha256.txt") == 1);
+    ex = 0; (void)tbl_fs_exists(outmanifest, &ex); T_ASSERT(ex == 1);
+
+    T_ASSERT(hash_file_hex(outpayload, sha_payload) == 1);
+    T_ASSERT(hash_file_hex(outrecord, sha_record) == 1);
+
+    T_ASSERT(read_all(outmanifest, manifest, sizeof(manifest)) == 1);
+
+    needle[0] = '\0';
+    T_ASSERT(tbl_strlcpy(needle, sha_payload, sizeof(needle)) < sizeof(needle));
+    T_ASSERT(tbl_strlcat(needle, "  payload.bin\n", sizeof(needle)) < sizeof(needle));
+    T_ASSERT(strstr(manifest, needle) != 0);
+
+    needle[0] = '\0';
+    T_ASSERT(tbl_strlcpy(needle, sha_record, sizeof(needle)) < sizeof(needle));
+    T_ASSERT(tbl_strlcat(needle, "  record.ini\n", sizeof(needle)) < sizeof(needle));
+    T_ASSERT(strstr(manifest, needle) != 0);
 
     (void)tbl_fs_rm_rf(base);
 

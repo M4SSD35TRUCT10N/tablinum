@@ -32,14 +32,15 @@ static void tbl_usage(const char *prog)
     printf("  %s [--config FILE] [--role ROLE]\n", prog);
     printf("  %s verify  JOBID [--config FILE]\n", prog);
     printf("  %s export  JOBID OUTDIR [--config FILE]\n", prog);
+    printf("  %s package JOBID OUTDIR [--format aip|sip] [--config FILE]\n", prog);
     printf("\n");
     printf("Roles:\n");
-    printf("  all | serve | ingest | index | worker | verify | export\n");
-    printf("  (implemented: ingest / verify / export)\n");
+    printf("  all | serve | ingest | index | worker | verify | export | package\n");
     printf("\n");
     printf("Options:\n");
     printf("  --config FILE        Path to INI config (default: tablinum.ini)\n");
     printf("  --role ROLE          Role to run (default: all)\n");
+    printf("  --format KIND        Packaging kind for 'package' (aip|sip)\n");
     printf("  --version            Print version\n");
     printf("  -h, --help           This help\n");
 }
@@ -56,7 +57,16 @@ static int tbl_role_from_str(const char *s, tbl_role_t *out)
     if (tbl_streq(s, "worker")) { *out = TBL_ROLE_WORKER; return 1; }
     if (tbl_streq(s, "verify")) { *out = TBL_ROLE_VERIFY; return 1; }
     if (tbl_streq(s, "export")) { *out = TBL_ROLE_EXPORT; return 1; }
+    if (tbl_streq(s, "package")) { *out = TBL_ROLE_PACKAGE; return 1; }
 
+    return 0;
+}
+
+static int tbl_pkg_from_str(const char *s, tbl_pkg_kind_t *out)
+{
+    if (!s || !out) return 0;
+    if (tbl_streq(s, "aip")) { *out = TBL_PKG_AIP; return 1; }
+    if (tbl_streq(s, "sip")) { *out = TBL_PKG_SIP; return 1; }
     return 0;
 }
 
@@ -96,6 +106,8 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
     cfg->role = TBL_ROLE_ALL;
     cfg->jobid = NULL;
     cfg->out_dir = NULL;
+    cfg->pkg_kind = TBL_PKG_AIP;
+    cfg->pkg_kind_set = 0;
 
     got_subcmd = 0;
     prog = (argc > 0 && argv && argv[0]) ? argv[0] : TBL_NAME;
@@ -155,6 +167,22 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
             continue;
         }
 
+        /* --format=KIND (for 'package') */
+        v = tbl_match_kv(a, "--format");
+        if (v) {
+            if (!v[0]) {
+                fprintf(stderr, "error: --format needs a value\n");
+                return 2;
+            }
+            if (!tbl_pkg_from_str(v, &cfg->pkg_kind)) {
+                fprintf(stderr, "error: unknown format: %s\n", v);
+                fprintf(stderr, "hint: use --help\n");
+                return 2;
+            }
+            cfg->pkg_kind_set = 1;
+            continue;
+        }
+
         /* --config FILE */
         if (tbl_streq(a, "--config")) {
             if (i + 1 >= argc) {
@@ -189,10 +217,30 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
             continue;
         }
 
+        /* --format KIND */
+        if (tbl_streq(a, "--format")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --format needs a value\n");
+                return 2;
+            }
+            i++;
+            if (!argv[i] || !argv[i][0]) {
+                fprintf(stderr, "error: --format needs a value\n");
+                return 2;
+            }
+            if (!tbl_pkg_from_str(argv[i], &cfg->pkg_kind)) {
+                fprintf(stderr, "error: unknown format: %s\n", argv[i]);
+                fprintf(stderr, "hint: use --help\n");
+                return 2;
+            }
+            cfg->pkg_kind_set = 1;
+            continue;
+        }
+
         /* Non-option token (subcommand/positional). */
         if (!tbl_is_option(a)) {
             /* allow "verify" / "export" as subcommand */
-            if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export"))) {
+            if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export") || tbl_streq(a, "package"))) {
                 got_subcmd = 1;
                 if (!tbl_role_from_str(a, &cfg->role)) {
                     fprintf(stderr, "error: unknown subcommand: %s\n", a);
@@ -216,6 +264,9 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
                     cfg->out_dir = a;
                     continue;
                 }
+            } else if (cfg->role == TBL_ROLE_PACKAGE) {
+                if (!cfg->jobid) { cfg->jobid = a; continue; }
+                if (!cfg->out_dir) { cfg->out_dir = a; continue; }
             }
 
             /* anything else is an error (strict) */
@@ -235,7 +286,7 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         const char *a = argv[i];
         if (!a || !a[0]) continue;
 
-        if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export"))) {
+        if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export") || tbl_streq(a, "package"))) {
             got_subcmd = 1;
             if (!tbl_role_from_str(a, &cfg->role)) {
                 fprintf(stderr, "error: unknown subcommand: %s\n", a);
@@ -247,6 +298,9 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         if (cfg->role == TBL_ROLE_VERIFY) {
             if (!cfg->jobid) { cfg->jobid = a; continue; }
         } else if (cfg->role == TBL_ROLE_EXPORT) {
+            if (!cfg->jobid) { cfg->jobid = a; continue; }
+            if (!cfg->out_dir) { cfg->out_dir = a; continue; }
+        } else if (cfg->role == TBL_ROLE_PACKAGE) {
             if (!cfg->jobid) { cfg->jobid = a; continue; }
             if (!cfg->out_dir) { cfg->out_dir = a; continue; }
         }
@@ -270,6 +324,20 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
             fprintf(stderr, "hint: %s export JOBID OUTDIR\n", prog);
             return 2;
         }
+    }
+
+    if (cfg->role == TBL_ROLE_PACKAGE) {
+        if (!cfg->jobid || !cfg->jobid[0] || !cfg->out_dir || !cfg->out_dir[0]) {
+            fprintf(stderr, "error: package needs JOBID and OUTDIR\n");
+            fprintf(stderr, "hint: %s package JOBID OUTDIR\n", prog);
+            return 2;
+        }
+    }
+
+    if (cfg->pkg_kind_set && cfg->role != TBL_ROLE_PACKAGE) {
+        fprintf(stderr, "error: --format is only valid with 'package'\n");
+        fprintf(stderr, "hint: %s package JOBID OUTDIR --format aip|sip\n", prog);
+        return 2;
     }
 
     return 0;

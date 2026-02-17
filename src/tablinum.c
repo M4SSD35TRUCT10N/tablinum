@@ -4,6 +4,7 @@
 #include "core/args.h"
 #include "core/config.h"
 #include "core/export.h"
+#include "core/package.h"
 #include "core/ingest.h"
 #include "core/log.h"
 #include "core/path.h"
@@ -87,6 +88,39 @@ static int run_export(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
         tbl_logf(TBL_LOG_ERROR, "[export] FAIL %s: %s", app->jobid, err);
     } else {
         tbl_logf(TBL_LOG_ERROR, "[export] FAIL %s", app->jobid);
+    }
+
+    return rc;
+}
+
+static int run_package(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
+{
+    char repo_root[1024];
+    char err[256];
+    int rc;
+
+    if (!app || !cfg) return 2;
+    if (!app->jobid || !app->jobid[0] || !app->out_dir || !app->out_dir[0]) {
+        tbl_logf(TBL_LOG_ERROR, "[package] needs JOBID and OUTDIR");
+        return 2;
+    }
+
+    if (!resolve_repo_root(repo_root, sizeof(repo_root), cfg)) {
+        tbl_logf(TBL_LOG_ERROR, "[package] repo path resolve failed");
+        return 2;
+    }
+
+    err[0] = '\0';
+    rc = tbl_package_job(repo_root, app->jobid, app->out_dir, app->pkg_kind, err, sizeof(err));
+    if (rc == 0) {
+        tbl_logf(TBL_LOG_INFO, "[package] OK %s -> %s", app->jobid, app->out_dir);
+        return 0;
+    }
+
+    if (err[0] != '\0') {
+        tbl_logf(TBL_LOG_ERROR, "[package] FAIL %s: %s", app->jobid, err);
+    } else {
+        tbl_logf(TBL_LOG_ERROR, "[package] FAIL %s", app->jobid);
     }
         return rc;
     }
@@ -193,6 +227,7 @@ int main(int argc, char **argv)
         case TBL_ROLE_WORKER: return run_worker(&app, &cfg);
         case TBL_ROLE_VERIFY: return run_verify(&app, &cfg);
         case TBL_ROLE_EXPORT: return run_export(&app, &cfg);
+        case TBL_ROLE_PACKAGE:return run_package(&app, &cfg);
         default: break;
     }
 

@@ -83,6 +83,34 @@ static int test_export_subcmd(void)
     return 0;
 }
 
+static int test_package_subcmd_default_format(void)
+{
+    tbl_app_config_t app;
+    char *argv4[] = { (char*)"tablinum", (char*)"package", (char*)"jobOK", (char*)"outpkg" };
+    int rc = tbl_args_parse(4, argv4, &app);
+
+    T_ASSERT_EQ_INT(rc, 0);
+    T_ASSERT_EQ_INT(app.role, TBL_ROLE_PACKAGE);
+    T_ASSERT(app.jobid != NULL);
+    T_ASSERT_STREQ(app.jobid, "jobOK");
+    T_ASSERT(app.out_dir != NULL);
+    T_ASSERT_STREQ(app.out_dir, "outpkg");
+    T_ASSERT_EQ_INT(app.pkg_kind, TBL_PKG_AIP);
+    return 0;
+}
+
+static int test_package_subcmd_format_sip(void)
+{
+    tbl_app_config_t app;
+    char *argv5[] = { (char*)"tablinum", (char*)"package", (char*)"jobOK", (char*)"outpkg", (char*)"--format", (char*)"sip" };
+    int rc = tbl_args_parse(6, argv5, &app);
+
+    T_ASSERT_EQ_INT(rc, 0);
+    T_ASSERT_EQ_INT(app.role, TBL_ROLE_PACKAGE);
+    T_ASSERT_EQ_INT(app.pkg_kind, TBL_PKG_SIP);
+    return 0;
+}
+
 int main(void)
 {
     T_ASSERT(test_defaults() == 0);
@@ -90,5 +118,7 @@ int main(void)
     T_ASSERT(test_role_and_config() == 0);
     T_ASSERT(test_verify_subcmd() == 0);
     T_ASSERT(test_export_subcmd() == 0);
+    T_ASSERT(test_package_subcmd_default_format() == 0);
+    T_ASSERT(test_package_subcmd_format_sip() == 0);
     T_OK();
 }

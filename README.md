@@ -24,8 +24,11 @@ tablinum --config tablinum.ini --role ingest
 # verify a stored job by recomputing SHA-256 from CAS
 tablinum verify JOBID
 
-# export payload + record to a directory
+# export payload + record (+ manifest) to a directory
 tablinum export JOBID ./export_dir
+
+# package as E-ARK inspired folder structure (OAIS-light)
+tablinum package JOBID ./aip_dir --format aip
 ```
 
 ---
@@ -48,11 +51,12 @@ Frühe Bootstrap‑Phase (aber schon funktionsfähig für den Kern‑Workflow):
 - robuste Spool/Claim‑Queue (Job‑Verzeichnisse)
 - Ingest‑Role: `inbox` → `claim` → `out`/`fail`
 - Fixity: SHA‑256
-- CAS: Payload wird in `repo/objects/<sha256>` abgelegt
+- CAS: Payload wird in `repo/sha256/<ab>/<rest>` abgelegt
 - Durable Records: `repo/records/<jobid>.ini`
 - Audit‑Trail: append‑only `repo/events.log`
 - Verify: `tablinum verify <jobid>` (recompute + compare)
-- Export: `tablinum export <jobid> <dir>` (DIP‑light)
+- Export: `tablinum export <jobid> <dir>` (DIP‑light: `payload.bin`, `record.ini`, `manifest-sha256.txt`)
+- Package: `tablinum package <jobid> <dir> [--format aip|sip]` (E-ARK‑inspiriert: `metadata/` + `representations/`)
 
 
 ### Ziele
@@ -125,6 +129,12 @@ tablinum verify JOBID --config tablinum.ini
 tablinum export JOBID OUTDIR --config tablinum.ini
 ```
 
+#### Package (E-ARK inspired, OAIS-light)
+
+```bat
+tablinum package JOBID OUTDIR --format aip --config tablinum.ini
+```
+
 Jobs in die Inbox legen:
 
 ```bat
@@ -170,11 +180,12 @@ Early bootstrap phase (but the core workflow already works):
 - robust spool/claim queue (job directories)
 - ingest role: `inbox` → `claim` → `out`/`fail`
 - fixity: SHA‑256
-- CAS: payload stored as `repo/objects/<sha256>`
+- CAS: payload stored as `repo/sha256/<ab>/<rest>`
 - durable records: `repo/records/<jobid>.ini`
 - audit trail: append‑only `repo/events.log`
 - verify: `tablinum verify <jobid>` (recompute + compare)
-- export: `tablinum export <jobid> <dir>` (DIP‑light)
+- export: `tablinum export <jobid> <dir>` (DIP‑light: `payload.bin`, `record.ini`, `manifest-sha256.txt`)
+- package: `tablinum package <jobid> <dir> [--format aip|sip]` (E-ARK inspired: `metadata/` + `representations/`)
 
 ### Goals
 
@@ -244,6 +255,12 @@ tablinum verify JOBID --config tablinum.ini
 
 ```bat
 tablinum export JOBID OUTDIR --config tablinum.ini
+```
+
+#### Package (E-ARK inspired, OAIS-light)
+
+```bat
+tablinum package JOBID OUTDIR --format aip --config tablinum.ini
 ```
 
 Drop files into the inbox:
