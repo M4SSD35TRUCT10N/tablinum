@@ -1,4 +1,6 @@
-#include <stdio.h>
+#define T_TESTNAME "sha256_test"
+#include "test.h"
+
 
 #define TBL_SAFE_IMPLEMENTATION
 #include "core/safe.h"
@@ -8,13 +10,6 @@
 
 #define TBL_SHA256_IMPLEMENTATION
 #include "core/sha256.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 static int hash_str(const char *s, char *hex, size_t hexsz)
 {
@@ -43,6 +38,5 @@ int main(void)
     T_ASSERT(hash_str("abc", hex, sizeof(hex)) == 1);
     T_ASSERT(tbl_streq(hex, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") == 1);
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

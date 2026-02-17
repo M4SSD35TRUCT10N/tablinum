@@ -1,5 +1,7 @@
-#include <stdio.h>
 #include <string.h>
+#define T_TESTNAME "config_test"
+#include "test.h"
+
 
 #define TBL_SAFE_IMPLEMENTATION
 #include "core/safe.h"
@@ -9,13 +11,6 @@
 
 #define TBL_CONFIG_IMPLEMENTATION
 #include "core/config.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 int main(void)
 {
@@ -62,6 +57,5 @@ int main(void)
     T_ASSERT(rc != 0);
     T_ASSERT(err[0] != '\0');
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

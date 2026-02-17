@@ -1,4 +1,6 @@
-#include <stdio.h>
+#define T_TESTNAME "cas_test"
+#include "test.h"
+
 
 #define TBL_SAFE_IMPLEMENTATION
 #include "core/safe.h"
@@ -17,13 +19,6 @@
 
 #define TBL_CAS_IMPLEMENTATION
 #include "core/cas.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 static int mk_tmp_base(char *out, size_t outsz)
 {
@@ -76,6 +71,5 @@ int main(void)
 
     (void)tbl_fs_rm_rf(base_dir);
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

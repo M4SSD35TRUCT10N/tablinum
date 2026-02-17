@@ -1,5 +1,7 @@
-#include <stdio.h>
 #include <string.h>
+#define T_TESTNAME "spool_test"
+#include "test.h"
+
 
 #define TBL_SAFE_IMPLEMENTATION
 #include "core/safe.h"
@@ -12,13 +14,6 @@
 
 #define TBL_SPOOL_IMPLEMENTATION
 #include "core/spool.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 static int mk_tmp_base(char *out, size_t outsz)
 {
@@ -132,6 +127,5 @@ int main(void)
     /* cleanup */
     (void)tbl_fs_rm_rf(base);
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

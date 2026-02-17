@@ -1,18 +1,13 @@
-#include <stdio.h>
 #include <string.h>
+#define T_TESTNAME "path_test"
+#include "test.h"
+
 
 #define TBL_SAFE_IMPLEMENTATION
 #include "core/safe.h"
 
 #define TBL_PATH_IMPLEMENTATION
 #include "core/path.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 static void make_expected_ab(char *out, size_t outsz, char sep)
 {
@@ -52,6 +47,5 @@ int main(void)
     T_ASSERT(tbl_path_is_abs("x/y") == 0);
 #endif
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

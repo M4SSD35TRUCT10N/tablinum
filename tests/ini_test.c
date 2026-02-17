@@ -1,18 +1,13 @@
-#include <stdio.h>
 #include <string.h>
+#define T_TESTNAME "ini_test"
+#include "test.h"
+
 
 #define TBL_SAFE_IMPLEMENTATION
 #include "core/safe.h"
 
 #define TBL_INI_IMPLEMENTATION
 #include "core/ini.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 typedef struct st_s {
     int step;
@@ -71,6 +66,5 @@ int main(void)
     T_ASSERT(rc != TBL_INI_OK);
     T_ASSERT(err[0] != '\0');
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

@@ -1,14 +1,9 @@
-#include <stdio.h>
+#define T_TESTNAME "str_test"
+#include "test.h"
+
 
 #define TBL_STR_IMPLEMENTATION
 #include "core/str.h"
-
-#define T_ASSERT(COND) do { \
-    if (!(COND)) { \
-        fprintf(stderr, "assert failed: %s (line %d)\n", #COND, __LINE__); \
-        return 1; \
-    } \
-} while (0)
 
 int main(void)
 {
@@ -33,6 +28,5 @@ int main(void)
     T_ASSERT(tbl_str_ends_with("a", "aa") == 0);
     T_ASSERT(tbl_str_ends_with(NULL, "") == 1);
 
-    printf("OK\n");
-    return 0;
+        T_OK();
 }

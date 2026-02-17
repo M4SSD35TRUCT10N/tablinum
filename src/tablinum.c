@@ -3,6 +3,7 @@
 
 #include "core/args.h"
 #include "core/config.h"
+#include "core/ingest.h"
 #include "core/log.h"
 #include "core/path.h"
 #include "core/safe.h"
@@ -31,130 +32,23 @@ static int run_serve(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
 
 static int run_ingest(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
 {
-    tbl_spool_t sp;
-    char spool_root[1024];
     char err[256];
     char name[256];
     unsigned long poll_ms;
     unsigned long jobs_done;
-    int once;
-    unsigned long max_jobs;
 
     (void)app;
 
-    jobs_done = 0UL;
-    once = (cfg->ingest_once != 0UL) ? 1 : 0;
-    max_jobs = cfg->ingest_max_jobs;
-
-    /* resolve spool path */
-    spool_root[0] = '\0';
-    if (tbl_path_is_abs(cfg->spool)) {
-        if (tbl_strlcpy(spool_root, cfg->spool, sizeof(spool_root)) >= sizeof(spool_root)) {
-            tbl_logf(TBL_LOG_ERROR, "spool path too long");
-            return 2;
-        }
-    } else {
-        if (!tbl_path_join2(spool_root, sizeof(spool_root), cfg->root, cfg->spool)) {
-            tbl_logf(TBL_LOG_ERROR, "spool path join failed");
-            return 2;
-        }
-    }
-
     err[0] = '\0';
-    if (tbl_spool_init(&sp, spool_root, err, sizeof(err)) != TBL_SPOOL_OK) {
-        tbl_logf(TBL_LOG_ERROR, "%s", err[0] ? err : "spool init failed");
+    jobs_done = 0UL;
+
+    tbl_logf(TBL_LOG_INFO, "[ingest] running (spool=%s, poll=%lu s, once=%lu, max_jobs=%lu)",
+             cfg->spool, cfg->ingest_poll_seconds, cfg->ingest_once, cfg->ingest_max_jobs);
+
+    if (tbl_ingest_run_ex(cfg, &jobs_done, err, sizeof(err)) != 0) {
+        tbl_logf(TBL_LOG_ERROR, "%s", err[0] ? err : "ingest failed");
         return 2;
     }
-
-    /* poll interval (seconds -> ms), clamp to avoid overflow */
-    if (cfg->ingest_poll_seconds == 0UL) {
-        poll_ms = 2000UL;
-    } else if (cfg->ingest_poll_seconds > (0xFFFFFFFFUL / 1000UL)) {
-        poll_ms = 0xFFFFFFFFUL;
-    } else {
-        poll_ms = cfg->ingest_poll_seconds * 1000UL;
-    }
-
-    tbl_logf(TBL_LOG_INFO, "[ingest] running (spool=%s, poll=%lu ms, once=%d, max_jobs=%lu)", spool_root, poll_ms, once, max_jobs);
-
-    for (;;) {
-        int rc;
-        int should_fail;
-
-        err[0] = '\0';
-        name[0] = '\0';
-
-        rc = tbl_spool_claim_next(&sp, name, sizeof(name), err, sizeof(err));
-        if (rc == TBL_SPOOL_ENOJOB) {
-            if (once) {
-                break;
-            }
-            tbl_sleep_ms(poll_ms);
-            continue;
-        }
-        if (rc != TBL_SPOOL_OK) {
-            tbl_logf(TBL_LOG_ERROR, "%s", err[0] ? err : "claim failed");
-            return 2;
-        }
-
-        /* demo failure rule: names ending with ".bad" -> fail */
-        should_fail = 0;
-        if (tbl_str_ends_with(name, ".bad")) {
-            should_fail = 1;
-        }
-
-        if (should_fail) {
-            err[0] = '\0';
-            rc = tbl_spool_commit_fail(&sp, name, err, sizeof(err));
-            if (rc != TBL_SPOOL_OK) {
-                tbl_logf(TBL_LOG_ERROR, "%s", err[0] ? err : "commit_fail failed");
-                return 2;
-            }
-            tbl_logf(TBL_LOG_WARN, "job failed: %s", name);
-
-            jobs_done++;
-            if (max_jobs > 0UL && jobs_done >= max_jobs) {
-                break;
-            }
-        } else {
-            char meta_name[300];
-            char meta_path[1024];
-            const char *meta = "status=ok\n";
-
-            err[0] = '\0';
-            rc = tbl_spool_commit_out(&sp, name, err, sizeof(err));
-            if (rc != TBL_SPOOL_OK) {
-                tbl_logf(TBL_LOG_ERROR, "%s", err[0] ? err : "commit_out failed");
-                return 2;
-            }
-
-            /* write a tiny sidecar into out: <name>.meta */
-            meta_name[0] = '\0';
-            if (tbl_strlcpy(meta_name, name, sizeof(meta_name)) >= sizeof(meta_name) ||
-                tbl_strlcat(meta_name, ".meta", sizeof(meta_name)) >= sizeof(meta_name)) {
-                tbl_logf(TBL_LOG_ERROR, "meta name too long for job: %s", name);
-                return 2;
-            }
-
-            if (!tbl_path_join2(meta_path, sizeof(meta_path), sp.out, meta_name)) {
-                tbl_logf(TBL_LOG_ERROR, "meta path too long for job: %s", name);
-                return 2;
-            }
-
-            if (tbl_fs_write_file(meta_path, meta, (size_t)tbl_strlen(meta)) != 0) {
-                tbl_logf(TBL_LOG_ERROR, "cannot write meta for job: %s", name);
-                return 2;
-            }
-
-            tbl_logf(TBL_LOG_INFO, "job ok: %s", name);
-
-            jobs_done++;
-            if (max_jobs > 0UL && jobs_done >= max_jobs) {
-                break;
-            }
-        }
-    }
-
 
     tbl_logf(TBL_LOG_INFO, "[ingest] done (%lu job(s))", jobs_done);
     return 0;
@@ -180,7 +74,7 @@ static int run_worker(const tbl_app_config_t *app, const tbl_cfg_t *cfg)
 
 int main(int argc, char **argv)
 {
-    int rc;
+        int rc;
     tbl_app_config_t app;
     tbl_cfg_t cfg;
     char err[256];
