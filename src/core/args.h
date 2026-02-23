@@ -21,28 +21,32 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg);
 #include <string.h>
 
 #include "core/str.h"
+#include "core/safe.h"
 
 static void tbl_usage(const char *prog)
 {
     if (!prog || !prog[0]) prog = TBL_NAME;
 
-    printf("%s %s\n", TBL_NAME, TBL_VERSION);
-    printf("Strict C89 single-binary document archive engine (paperless-style).\n");
-    printf("Usage:\n");
-    printf("  %s [--config FILE] [--role ROLE]\n", prog);
-    printf("  %s verify  JOBID [--config FILE]\n", prog);
-    printf("  %s export  JOBID OUTDIR [--config FILE]\n", prog);
-    printf("  %s package JOBID OUTDIR [--format aip|sip] [--config FILE]\n", prog);
-    printf("\n");
-    printf("Roles:\n");
-    printf("  all | serve | ingest | index | worker | verify | export | package\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("  --config FILE        Path to INI config (default: tablinum.ini)\n");
-    printf("  --role ROLE          Role to run (default: all)\n");
-    printf("  --format KIND        Packaging kind for 'package' (aip|sip)\n");
-    printf("  --version            Print version\n");
-    printf("  -h, --help           This help\n");
+    (void)tbl_fputs4_ok(stdout, TBL_NAME, " ", TBL_VERSION, "\n");
+    (void)tbl_fputs_ok(stdout, "Strict C89 single-binary document archive engine (paperless-style).\n");
+    (void)tbl_fputs_ok(stdout, "Usage:\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " [--config FILE] [--role ROLE]\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " verify  JOBID [--config FILE]\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " export  JOBID OUTDIR [--config FILE]\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " verify-package PKGDIR\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " ingest-package PKGDIR [--config FILE]\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " verify-audit [--config FILE]\n");
+    (void)tbl_fputs3_ok(stdout, "  ", prog, " package JOBID OUTDIR [--format aip|sip] [--config FILE]\n");
+    (void)tbl_fputs_ok(stdout, "\n");
+    (void)tbl_fputs_ok(stdout, "Roles:\n");
+    (void)tbl_fputs_ok(stdout, "  all | serve | ingest | index | worker | verify | export | package | verify-package | ingest-package | verify-audit\n");
+    (void)tbl_fputs_ok(stdout, "\n");
+    (void)tbl_fputs_ok(stdout, "Options:\n");
+    (void)tbl_fputs_ok(stdout, "  --config FILE        Path to INI config (default: tablinum.ini)\n");
+    (void)tbl_fputs_ok(stdout, "  --role ROLE          Role to run (default: all)\n");
+    (void)tbl_fputs_ok(stdout, "  --format KIND        Packaging kind for 'package' (aip|sip)\n");
+    (void)tbl_fputs_ok(stdout, "  --version            Print version\n");
+    (void)tbl_fputs_ok(stdout, "  -h, --help           This help\n");
 }
 
 /* role names are case-sensitive on purpose (strict). */
@@ -58,6 +62,10 @@ static int tbl_role_from_str(const char *s, tbl_role_t *out)
     if (tbl_streq(s, "verify")) { *out = TBL_ROLE_VERIFY; return 1; }
     if (tbl_streq(s, "export")) { *out = TBL_ROLE_EXPORT; return 1; }
     if (tbl_streq(s, "package")) { *out = TBL_ROLE_PACKAGE; return 1; }
+    if (tbl_streq(s, "verify-package")) { *out = TBL_ROLE_VERIFY_PACKAGE; return 1; }
+    if (tbl_streq(s, "ingest-package")) { *out = TBL_ROLE_INGEST_PACKAGE; return 1; }
+    if (tbl_streq(s, "verify-audit")) { *out = TBL_ROLE_VERIFY_AUDIT; return 1; }
+    if (tbl_streq(s, "audit-verify")) { *out = TBL_ROLE_VERIFY_AUDIT; return 1; } /* alias */
 
     return 0;
 }
@@ -98,7 +106,7 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
 
     if (!cfg) {
         /* Programmer error: hard fail mentality, but return error here to stay standalone. */
-        fprintf(stderr, "tablinum: internal error: cfg is NULL\n");
+        (void)tbl_fputs_ok(stderr, "tablinum: internal error: cfg is NULL\n");
         return 2;
     }
 
@@ -106,6 +114,7 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
     cfg->role = TBL_ROLE_ALL;
     cfg->jobid = NULL;
     cfg->out_dir = NULL;
+    cfg->pkg_dir = NULL;
     cfg->pkg_kind = TBL_PKG_AIP;
     cfg->pkg_kind_set = 0;
 
@@ -126,7 +135,7 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         if (!a) continue;
 
         if (tbl_streq(a, "--version")) {
-            printf("%s %s\n", TBL_NAME, TBL_VERSION);
+            (void)tbl_fputs4_ok(stdout, TBL_NAME, " ", TBL_VERSION, "\n");
             return 1; /* handled */
         }
 
@@ -145,7 +154,7 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         v = tbl_match_kv(a, "--config");
         if (v) {
             if (!v[0]) {
-                fprintf(stderr, "error: --config needs a file\n");
+                (void)tbl_fputs_ok(stderr, "error: --config needs a file\n");
                 return 2;
             }
             cfg->config_path = v;
@@ -156,12 +165,12 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         v = tbl_match_kv(a, "--role");
         if (v) {
             if (!v[0]) {
-                fprintf(stderr, "error: --role needs a value\n");
+                (void)tbl_fputs_ok(stderr, "error: --role needs a value\n");
                 return 2;
             }
             if (!tbl_role_from_str(v, &cfg->role)) {
-                fprintf(stderr, "error: unknown role: %s\n", v);
-                fprintf(stderr, "hint: use --help\n");
+                (void)tbl_fputs3_ok(stderr, "error: unknown role: ", v, "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
                 return 2;
             }
             continue;
@@ -171,12 +180,12 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         v = tbl_match_kv(a, "--format");
         if (v) {
             if (!v[0]) {
-                fprintf(stderr, "error: --format needs a value\n");
+                (void)tbl_fputs_ok(stderr, "error: --format needs a value\n");
                 return 2;
             }
             if (!tbl_pkg_from_str(v, &cfg->pkg_kind)) {
-                fprintf(stderr, "error: unknown format: %s\n", v);
-                fprintf(stderr, "hint: use --help\n");
+                (void)tbl_fputs3_ok(stderr, "error: unknown format: ", v, "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
                 return 2;
             }
             cfg->pkg_kind_set = 1;
@@ -186,12 +195,12 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         /* --config FILE */
         if (tbl_streq(a, "--config")) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "error: --config needs a file\n");
+                (void)tbl_fputs_ok(stderr, "error: --config needs a file\n");
                 return 2;
             }
             i++;
             if (!argv[i] || !argv[i][0]) {
-                fprintf(stderr, "error: --config needs a file\n");
+                (void)tbl_fputs_ok(stderr, "error: --config needs a file\n");
                 return 2;
             }
             cfg->config_path = argv[i];
@@ -201,17 +210,17 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         /* --role ROLE */
         if (tbl_streq(a, "--role")) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "error: --role needs a value\n");
+                (void)tbl_fputs_ok(stderr, "error: --role needs a value\n");
                 return 2;
             }
             i++;
             if (!argv[i] || !argv[i][0]) {
-                fprintf(stderr, "error: --role needs a value\n");
+                (void)tbl_fputs_ok(stderr, "error: --role needs a value\n");
                 return 2;
             }
             if (!tbl_role_from_str(argv[i], &cfg->role)) {
-                fprintf(stderr, "error: unknown role: %s\n", argv[i]);
-                fprintf(stderr, "hint: use --help\n");
+                (void)tbl_fputs3_ok(stderr, "error: unknown role: ", argv[i], "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
                 return 2;
             }
             continue;
@@ -220,17 +229,17 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         /* --format KIND */
         if (tbl_streq(a, "--format")) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "error: --format needs a value\n");
+                (void)tbl_fputs_ok(stderr, "error: --format needs a value\n");
                 return 2;
             }
             i++;
             if (!argv[i] || !argv[i][0]) {
-                fprintf(stderr, "error: --format needs a value\n");
+                (void)tbl_fputs_ok(stderr, "error: --format needs a value\n");
                 return 2;
             }
             if (!tbl_pkg_from_str(argv[i], &cfg->pkg_kind)) {
-                fprintf(stderr, "error: unknown format: %s\n", argv[i]);
-                fprintf(stderr, "hint: use --help\n");
+                (void)tbl_fputs3_ok(stderr, "error: unknown format: ", argv[i], "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
                 return 2;
             }
             cfg->pkg_kind_set = 1;
@@ -240,11 +249,11 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         /* Non-option token (subcommand/positional). */
         if (!tbl_is_option(a)) {
             /* allow "verify" / "export" as subcommand */
-            if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export") || tbl_streq(a, "package"))) {
+            if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export") || tbl_streq(a, "package") || tbl_streq(a, "verify-package") || tbl_streq(a, "ingest-package") || tbl_streq(a, "verify-audit") || tbl_streq(a, "audit-verify"))) {
                 got_subcmd = 1;
                 if (!tbl_role_from_str(a, &cfg->role)) {
-                    fprintf(stderr, "error: unknown subcommand: %s\n", a);
-                    return 2;
+                    (void)tbl_fputs3_ok(stderr, "error: unknown subcommand: ", a, "\n");
+            return 2;
                 }
                 continue;
             }
@@ -267,17 +276,21 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
             } else if (cfg->role == TBL_ROLE_PACKAGE) {
                 if (!cfg->jobid) { cfg->jobid = a; continue; }
                 if (!cfg->out_dir) { cfg->out_dir = a; continue; }
+            } else if (cfg->role == TBL_ROLE_VERIFY_PACKAGE) {
+                if (!cfg->pkg_dir) { cfg->pkg_dir = a; continue; }
+            } else if (cfg->role == TBL_ROLE_INGEST_PACKAGE) {
+                if (!cfg->pkg_dir) { cfg->pkg_dir = a; continue; }
             }
 
             /* anything else is an error (strict) */
-            fprintf(stderr, "error: unexpected positional argument: %s\n", a);
-            fprintf(stderr, "hint: use --help\n");
+            (void)tbl_fputs3_ok(stderr, "error: unexpected positional argument: ", a, "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
             return 2;
         }
 
         /* Strict: no unknown arguments allowed */
-        fprintf(stderr, "error: unknown argument: %s\n", a);
-        fprintf(stderr, "hint: use --help\n");
+        (void)tbl_fputs3_ok(stderr, "error: unknown argument: ", a, "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
         return 2;
     }
 
@@ -286,11 +299,11 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         const char *a = argv[i];
         if (!a || !a[0]) continue;
 
-        if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export") || tbl_streq(a, "package"))) {
+        if (!got_subcmd && (tbl_streq(a, "verify") || tbl_streq(a, "export") || tbl_streq(a, "package") || tbl_streq(a, "verify-package") || tbl_streq(a, "ingest-package") || tbl_streq(a, "verify-audit") || tbl_streq(a, "audit-verify"))) {
             got_subcmd = 1;
             if (!tbl_role_from_str(a, &cfg->role)) {
-                fprintf(stderr, "error: unknown subcommand: %s\n", a);
-                return 2;
+                (void)tbl_fputs3_ok(stderr, "error: unknown subcommand: ", a, "\n");
+            return 2;
             }
             continue;
         }
@@ -303,41 +316,65 @@ int tbl_args_parse(int argc, char **argv, tbl_app_config_t *cfg)
         } else if (cfg->role == TBL_ROLE_PACKAGE) {
             if (!cfg->jobid) { cfg->jobid = a; continue; }
             if (!cfg->out_dir) { cfg->out_dir = a; continue; }
+        } else if (cfg->role == TBL_ROLE_VERIFY_PACKAGE) {
+            if (!cfg->pkg_dir) { cfg->pkg_dir = a; continue; }
+        } else if (cfg->role == TBL_ROLE_INGEST_PACKAGE) {
+            if (!cfg->pkg_dir) { cfg->pkg_dir = a; continue; }
         }
 
-        fprintf(stderr, "error: unexpected positional argument: %s\n", a);
-        fprintf(stderr, "hint: use --help\n");
+        (void)tbl_fputs3_ok(stderr, "error: unexpected positional argument: ", a, "\n");
+                (void)tbl_fputs_ok(stderr, "hint: use --help\n");
         return 2;
     }
 
     /* Validate required positional args */
     if (cfg->role == TBL_ROLE_VERIFY) {
         if (!cfg->jobid || !cfg->jobid[0]) {
-            fprintf(stderr, "error: verify needs JOBID\n");
-            fprintf(stderr, "hint: %s verify JOBID\n", prog);
+            (void)tbl_fputs_ok(stderr, "error: verify needs JOBID\n");
+            (void)tbl_fputs3_ok(stderr, "hint: ", prog, " verify JOBID\n");
             return 2;
         }
     }
     if (cfg->role == TBL_ROLE_EXPORT) {
         if (!cfg->jobid || !cfg->jobid[0] || !cfg->out_dir || !cfg->out_dir[0]) {
-            fprintf(stderr, "error: export needs JOBID and OUTDIR\n");
-            fprintf(stderr, "hint: %s export JOBID OUTDIR\n", prog);
+            (void)tbl_fputs_ok(stderr, "error: export needs JOBID and OUTDIR\n");
+            (void)tbl_fputs3_ok(stderr, "hint: ", prog, " export JOBID OUTDIR\n");
             return 2;
         }
     }
 
     if (cfg->role == TBL_ROLE_PACKAGE) {
         if (!cfg->jobid || !cfg->jobid[0] || !cfg->out_dir || !cfg->out_dir[0]) {
-            fprintf(stderr, "error: package needs JOBID and OUTDIR\n");
-            fprintf(stderr, "hint: %s package JOBID OUTDIR\n", prog);
+            (void)tbl_fputs_ok(stderr, "error: package needs JOBID and OUTDIR\n");
+            (void)tbl_fputs3_ok(stderr, "hint: ", prog, " package JOBID OUTDIR\n");
             return 2;
         }
     }
 
+    if (cfg->role == TBL_ROLE_VERIFY_PACKAGE) {
+        if (!cfg->pkg_dir || !cfg->pkg_dir[0]) {
+            (void)tbl_fputs_ok(stderr, "error: verify-package needs PKGDIR\n");
+            (void)tbl_fputs3_ok(stderr, "hint: ", prog, " verify-package PKGDIR\n");
+            return 2;
+        }
+    }
+
+    if (cfg->role == TBL_ROLE_INGEST_PACKAGE) {
+        if (!cfg->pkg_dir || !cfg->pkg_dir[0]) {
+            (void)tbl_fputs_ok(stderr, "error: ingest-package needs PKGDIR\n");
+            (void)tbl_fputs3_ok(stderr, "hint: ", prog, " ingest-package PKGDIR --config PATH\n");
+            return 2;
+        }
+    }
+
+    if (cfg->role == TBL_ROLE_VERIFY_AUDIT) {
+        /* no positional args */
+    }
+
     if (cfg->pkg_kind_set && cfg->role != TBL_ROLE_PACKAGE) {
-        fprintf(stderr, "error: --format is only valid with 'package'\n");
-        fprintf(stderr, "hint: %s package JOBID OUTDIR --format aip|sip\n", prog);
-        return 2;
+        (void)tbl_fputs_ok(stderr, "error: --format is only valid with 'package'\n");
+        (void)tbl_fputs3_ok(stderr, "hint: ", prog, " package JOBID OUTDIR --format aip|sip\n");
+            return 2;
     }
 
     return 0;

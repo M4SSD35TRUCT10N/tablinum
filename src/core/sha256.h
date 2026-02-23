@@ -19,6 +19,11 @@ void tbl_sha256_final(tbl_sha256_t *s, unsigned char out32[32]);
 
 /* Convert digest to lowercase hex (needs out_sz >= 65). */
 int tbl_sha256_hex(const unsigned char digest32[32], char *out, size_t out_sz);
+int tbl_sha256_hex_ok(const unsigned char digest32[32], char *out, size_t out_sz);
+
+#if defined(TBL_STRICT_NAMES) && !defined(TBL_SHA256_IMPLEMENTATION)
+#define tbl_sha256_hex TBL_FORBIDDEN_use_tbl_sha256_hex_ok
+#endif
 
 #ifdef TBL_SHA256_IMPLEMENTATION
 
@@ -246,6 +251,12 @@ int tbl_sha256_hex(const unsigned char digest32[32], char *out, size_t out_sz)
     }
     out[64] = '\0';
     return 1;
+}
+
+
+int tbl_sha256_hex_ok(const unsigned char digest32[32], char *out, size_t out_sz)
+{
+    return tbl_sha256_hex(digest32, out, out_sz);
 }
 
 #endif /* TBL_SHA256_IMPLEMENTATION */

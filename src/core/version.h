@@ -6,8 +6,8 @@
 /* SemVer-ish (0.y.z): bump PATCH for incremental features/bugfixes,
    bump MINOR for larger milestones, bump MAJOR for breaking changes. */
 #define TBL_VERSION_MAJOR 0
-#define TBL_VERSION_MINOR 1
-#define TBL_VERSION_PATCH 4
+#define TBL_VERSION_MINOR 2
+#define TBL_VERSION_PATCH 0
 
 /* Pre-release tag (set to "" for release builds).
    You may override from the build system via -DTBL_VERSION_SUFFIX="\"-dev\"" etc. */

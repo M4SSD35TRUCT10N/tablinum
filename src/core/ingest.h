@@ -2,6 +2,7 @@
 #define TBL_CORE_INGEST_H
 
 #include <stddef.h>
+#include <time.h>
 #include "core/config.h"
 
 /* Ingest role (SIP-light jobdir -> AIP-light CAS + records):

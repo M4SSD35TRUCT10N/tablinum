@@ -90,7 +90,7 @@ static void tbl_ini_seterr(char *err, size_t errsz, const char *msg, int line_no
 
     if (!msg) msg = "ini error";
 
-    (void)tbl_u32_to_dec((unsigned long)line_no, num, sizeof(num));
+    (void)tbl_u32_to_dec_ok((unsigned long)line_no, num, sizeof(num));
 
     (void)tbl_strlcpy(err, msg, errsz);
     (void)tbl_strlcat(err, " (line ", errsz);

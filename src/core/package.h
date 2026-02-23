@@ -2,6 +2,7 @@
 #define TBL_CORE_PACKAGE_H
 
 #include <stddef.h>
+#include <time.h>
 #include "tablinum.h"
 
 /* Build an E-ARK inspired, OAIS-light package from a stored job.
@@ -136,7 +137,7 @@ static int tbl_pkg_hash_file_hex(const char *path, char out_hex[65], char *err, 
     fclose(fp);
 
     tbl_sha256_final(&st, dig);
-    if (!tbl_sha256_hex(dig, out_hex, 65)) {
+    if (!tbl_sha256_hex_ok(dig, out_hex, 65)) {
         tbl_pkg_seterr(err, errsz, "hex buffer too small");
         return 2;
     }
@@ -147,10 +148,16 @@ static int tbl_pkg_extract_events(const char *repo_root,
                                  const char *jobid,
                                  const char *out_path,
                                  unsigned long *out_lines,
+                                 int *out_is_job_stream,
                                  char *err, size_t errsz)
 {
-    char src_path[1024];
+    char legacy_path[1024];
+    char jobs_dir[1024];
+    char job_dir[1024];
+    char job_path[1024];
+
     FILE *in;
+    int is_job_stream;
     FILE *out;
     char line[2048];
     char needle1[512];
@@ -158,26 +165,41 @@ static int tbl_pkg_extract_events(const char *repo_root,
     unsigned long nlines;
 
     if (out_lines) *out_lines = 0UL;
+    if (out_is_job_stream) *out_is_job_stream = 0;
 
     if (!repo_root || !repo_root[0] || !jobid || !jobid[0] || !out_path || !out_path[0]) {
         tbl_pkg_seterr(err, errsz, "invalid args");
         return 2;
     }
 
-    if (!tbl_path_join2(src_path, sizeof(src_path), repo_root, "events.log")) {
-        tbl_pkg_seterr(err, errsz, "events path too long");
-        return 2;
-    }
-
-    /* Always create out_path (empty is fine if src missing). */
+    /* Always create out_path (empty is fine if no source exists). */
     out = fopen(out_path, "wb");
     if (!out) {
         tbl_pkg_seterr(err, errsz, "cannot create events log");
         return 2;
     }
 
-    /* If repo events.log does not exist, keep empty file. */
-    in = fopen(src_path, "rb");
+    /* Prefer per-job events: <repo_root>/jobs/<jobid>/events.log */
+    in = 0;
+    is_job_stream = 0;
+    if (tbl_path_join2(jobs_dir, sizeof(jobs_dir), repo_root, "jobs") &&
+        tbl_path_join2(job_dir, sizeof(job_dir), jobs_dir, jobid) &&
+        tbl_path_join2(job_path, sizeof(job_path), job_dir, "events.log")) {
+        in = fopen(job_path, "rb");
+        if (in) { is_job_stream = 1; if (out_is_job_stream) *out_is_job_stream = 1; }
+    }
+
+    /* Fallback legacy combined stream: <repo_root>/events.log filtered by job=<jobid> */
+    if (!in) {
+        if (!tbl_path_join2(legacy_path, sizeof(legacy_path), repo_root, "events.log")) {
+            fclose(out);
+            tbl_pkg_seterr(err, errsz, "events path too long");
+            return 2;
+        }
+        in = fopen(legacy_path, "rb");
+    }
+
+    /* If no source exists, keep empty file. */
     if (!in) {
         (void)fclose(out);
         return 0;
@@ -192,8 +214,24 @@ static int tbl_pkg_extract_events(const char *repo_root,
 
     nlines = 0UL;
     while (fgets(line, (int)sizeof(line), in) != 0) {
-        if (strstr(line, needle1) || strstr(line, needle2)) {
-            if (fputs(line, out) == EOF) {
+        int match = 1;
+
+        if (!is_job_stream) {
+            match = (strstr(line, needle1) != 0) || (strstr(line, needle2) != 0);
+        }
+
+        if (match) {
+            /* normalize to LF-only for deterministic packages */
+            char clean[2048];
+            size_t i, j;
+            j = 0;
+            for (i = 0; line[i] && j + 1 < sizeof(clean); ++i) {
+                if (line[i] == '\r') continue;
+                clean[j++] = line[i];
+            }
+            clean[j] = '\0';
+
+            if (fputs(clean, out) == EOF) {
                 fclose(in);
                 fclose(out);
                 tbl_pkg_seterr(err, errsz, "events write error");
@@ -213,22 +251,18 @@ static int tbl_pkg_extract_events(const char *repo_root,
     return 0;
 }
 
+
 static int tbl_pkg_write_package_ini(const char *path,
                                     const char *kind_str,
                                     const char *jobid,
-                                    const char *payload_name,
-                                    const char *payload_sha,
-                                    const char *record_sha,
-                                    const char *cas_sha,
-                                    unsigned long created_ts,
-                                    unsigned long events_lines,
+                                    unsigned long created_utc,
+                                    const char *events_source,
+                                    const char *tool_commit_opt,
                                     char *err, size_t errsz)
 {
     FILE *fp;
 
-    if (!path || !path[0] || !kind_str || !kind_str[0] || !jobid || !jobid[0] ||
-        !payload_name || !payload_name[0] || !payload_sha || !payload_sha[0] ||
-        !record_sha || !record_sha[0] || !cas_sha || !cas_sha[0]) {
+    if (!path || !path[0] || !kind_str || !kind_str[0] || !jobid || !jobid[0]) {
         tbl_pkg_seterr(err, errsz, "invalid args");
         return 2;
     }
@@ -239,30 +273,37 @@ static int tbl_pkg_write_package_ini(const char *path,
         return 2;
     }
 
-    if (fprintf(fp,
-                "[package]\n"
-                "schema = tablinum.package.v1\n"
-                "kind = %s\n"
-                "jobid = %s\n"
-                "created_ts = %lu\n"
-                "tool = %s %s\n"
-                "payload_name = %s\n"
-                "payload_sha256 = %s\n"
-                "record_sha256 = %s\n"
-                "cas_sha256 = %s\n"
-                "events_lines = %lu\n",
-                kind_str,
-                jobid,
-                created_ts,
-                TBL_NAME, TBL_VERSION,
-                payload_name,
-                payload_sha,
-                record_sha,
-                cas_sha,
-                events_lines) < 0) {
-        fclose(fp);
-        tbl_pkg_seterr(err, errsz, "package.ini write error");
-        return 2;
+        /* Strict, versioned schema core (deterministic order, LF-only). */
+    {
+        char nbuf[32];
+        const char *es;
+
+        es = (events_source && events_source[0]) ? events_source : "legacy";
+        if (!tbl_ul_to_dec_ok(created_utc, nbuf, sizeof(nbuf))) {
+            fclose(fp);
+            tbl_pkg_seterr(err, errsz, "package.ini created_utc encode error");
+            return 2;
+        }
+
+        if (!tbl_fputs_ok(fp, "[package]\n") ||
+            !tbl_fputs_ok(fp, "schema_version = 1\n") ||
+            !tbl_fputs3_ok(fp, "kind = ", kind_str, "\n") ||
+            !tbl_fputs3_ok(fp, "jobid = ", jobid, "\n") ||
+            !tbl_fputs3_ok(fp, "created_utc = ", nbuf, "\n") ||
+            !tbl_fputs3_ok(fp, "events_source = ", es, "\n") ||
+            !tbl_fputs3_ok(fp, "tool_version = ", TBL_VERSION, "\n")) {
+            fclose(fp);
+            tbl_pkg_seterr(err, errsz, "package.ini write error");
+            return 2;
+        }
+    }
+
+    if (tool_commit_opt && tool_commit_opt[0]) {
+        if (!tbl_fputs3_ok(fp, "tool_commit = ", tool_commit_opt, "\n")) {
+            fclose(fp);
+            tbl_pkg_seterr(err, errsz, "package.ini write error");
+            return 2;
+        }
     }
 
     if (fclose(fp) != 0) {
@@ -296,11 +337,11 @@ static int tbl_pkg_write_manifest(const char *path,
         return 2;
     }
 
-    /* sha256sum-compatible: <hex><two spaces><relative path> */
-    if (fprintf(fp, "%s  %s\n", payload_sha, payload_rel) < 0 ||
-        fprintf(fp, "%s  metadata/record.ini\n", record_sha) < 0 ||
-        fprintf(fp, "%s  metadata/package.ini\n", package_sha) < 0 ||
-        fprintf(fp, "%s  metadata/events.log\n", events_sha) < 0) {
+        /* sha256sum-compatible: <hex><two spaces><relative path> */
+    if (!tbl_fputs4_ok(fp, payload_sha, "  ", payload_rel, "\n") ||
+        !tbl_fputs3_ok(fp, record_sha, "  metadata/record.ini", "\n") ||
+        !tbl_fputs3_ok(fp, package_sha, "  metadata/package.ini", "\n") ||
+        !tbl_fputs3_ok(fp, events_sha, "  metadata/events.log", "\n")) {
         fclose(fp);
         tbl_pkg_seterr(err, errsz, "manifest write error");
         return 2;
@@ -342,11 +383,13 @@ int tbl_package_job(const char *repo_root,
 
     unsigned long created_ts;
     unsigned long events_lines;
+    int events_is_job;
 
     int rc;
     int ex;
 
     const char *kind_str;
+    const char *tool_commit;
 
     if (err && errsz) err[0] = '\0';
     if (!repo_root || !repo_root[0] || !jobid || !jobid[0] || !out_dir || !out_dir[0]) {
@@ -355,6 +398,15 @@ int tbl_package_job(const char *repo_root,
     }
 
     kind_str = (kind == TBL_PKG_SIP) ? "sip" : "aip";
+
+    /* Optional tool commit (derived from build meta, if present). */
+    tool_commit = 0;
+#ifdef TBL_BUILD_META
+    if (TBL_BUILD_META[0]) {
+        tool_commit = TBL_BUILD_META;
+        if (tool_commit[0] == '+') tool_commit++;
+    }
+#endif
 
     /* ensure package root exists */
     if (tbl_fs_mkdir_p(out_dir) != 0) {
@@ -365,20 +417,20 @@ int tbl_package_job(const char *repo_root,
     /* read durable record */
     rc = tbl_record_read_repo(repo_root, jobid, &rec, err, errsz);
     if (rc != 0) {
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", "", err && err[0] ? err : "record read failed", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
     /* For now: require ok record for both AIP and SIP packaging. */
     if (!tbl_streq(rec.status, "ok")) {
         tbl_pkg_seterr(err, errsz, "record status is not ok");
-        (void)tbl_events_append(repo_root, "package.skip", jobid, rec.status, rec.sha256, rec.reason, 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
     if (!tbl_cas_object_path(repo_root, rec.sha256, objpath, sizeof(objpath))) {
         tbl_pkg_seterr(err, errsz, "object path too long");
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", rec.sha256, "object path too long", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
@@ -386,7 +438,7 @@ int tbl_package_job(const char *repo_root,
     (void)tbl_fs_exists(objpath, &ex);
     if (!ex) {
         tbl_pkg_seterr(err, errsz, "object missing");
-        (void)tbl_events_append(repo_root, "package.fail", jobid, "fail", rec.sha256, "object missing", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
@@ -422,7 +474,7 @@ int tbl_package_job(const char *repo_root,
 
     rc = tbl_pkg_copy_file(objpath, out_payload, err, errsz);
     if (rc != 0) {
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", rec.sha256, err && err[0] ? err : "copy payload failed", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
@@ -434,7 +486,7 @@ int tbl_package_job(const char *repo_root,
 
     rc = tbl_pkg_copy_file(record_path, out_record, err, errsz);
     if (rc != 0) {
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", rec.sha256, err && err[0] ? err : "copy record failed", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
@@ -444,9 +496,10 @@ int tbl_package_job(const char *repo_root,
         return 2;
     }
     events_lines = 0UL;
-    rc = tbl_pkg_extract_events(repo_root, jobid, out_events, &events_lines, err, errsz);
+    events_is_job = 0;
+    rc = tbl_pkg_extract_events(repo_root, jobid, out_events, &events_lines, &events_is_job, err, errsz);
     if (rc != 0) {
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", rec.sha256, err && err[0] ? err : "events extract failed", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
@@ -464,19 +517,16 @@ int tbl_package_job(const char *repo_root,
         return 2;
     }
 
-    created_ts = (unsigned long)time(0);
+    created_ts = (rec.stored_at != 0UL) ? rec.stored_at : (unsigned long)time(0);
     rc = tbl_pkg_write_package_ini(out_package_ini,
-                                  kind_str,
-                                  jobid,
-                                  rec.payload[0] ? rec.payload : "payload.bin",
-                                  sha_payload,
-                                  sha_record,
-                                  rec.sha256,
-                                  created_ts,
-                                  events_lines,
-                                  err, errsz);
+                                kind_str,
+                                jobid,
+                                created_ts,
+                                events_is_job ? "job" : "legacy",
+                                tool_commit,
+                                err, errsz);
     if (rc != 0) {
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", rec.sha256, err && err[0] ? err : "write package.ini failed", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
@@ -501,11 +551,11 @@ int tbl_package_job(const char *repo_root,
                                sha_events,
                                err, errsz);
     if (rc != 0) {
-        (void)tbl_events_append(repo_root, "package.error", jobid, "error", rec.sha256, err && err[0] ? err : "manifest write failed", 0, 0);
+        (void)0; /* package: no repo side effects */
         return 2;
     }
 
-    (void)tbl_events_append(repo_root, "package.ok", jobid, kind_str, rec.sha256, "", 0, 0);
+    (void)0; /* package: no repo side effects */
     return 0;
 }
 

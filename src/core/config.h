@@ -120,7 +120,7 @@ static int tbl_cfg_on_kv(void *ud, const char *section, const char *key, const c
     if (strcmp(section, "ingest") == 0) {
         if (strcmp(key, "poll_seconds") == 0) {
             unsigned long v;
-            if (!tbl_parse_u32(value, &v)) {
+            if (!tbl_parse_u32_ok(value, &v)) {
                 tbl_cfg_seterr(ctx->err, ctx->errsz, "invalid poll_seconds");
                 return 1;
             }
@@ -134,7 +134,7 @@ static int tbl_cfg_on_kv(void *ud, const char *section, const char *key, const c
 
         if (strcmp(key, "once") == 0) {
             unsigned long v;
-            if (!tbl_parse_u32(value, &v)) {
+            if (!tbl_parse_u32_ok(value, &v)) {
                 tbl_cfg_seterr(ctx->err, ctx->errsz, "invalid once");
                 return 1;
             }
@@ -148,7 +148,7 @@ static int tbl_cfg_on_kv(void *ud, const char *section, const char *key, const c
 
         if (strcmp(key, "max_jobs") == 0) {
             unsigned long v;
-            if (!tbl_parse_u32(value, &v)) {
+            if (!tbl_parse_u32_ok(value, &v)) {
                 tbl_cfg_seterr(ctx->err, ctx->errsz, "invalid max_jobs");
                 return 1;
             }

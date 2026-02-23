@@ -122,7 +122,7 @@ static int tbl_export_hash_file_hex(const char *path, char out_hex[65], char *er
     fclose(fp);
 
     tbl_sha256_final(&st, dig);
-    if (!tbl_sha256_hex(dig, out_hex, 65)) {
+    if (!tbl_sha256_hex_ok(dig, out_hex, 65)) {
         tbl_export_seterr(err, errsz, "hex buffer too small");
         return 2;
     }
@@ -150,8 +150,8 @@ static int tbl_export_write_manifest(const char *manifest_path,
     }
 
     /* sha256sum-compatible: <hex><two spaces><relative path> */
-    if (fprintf(fp, "%s  %s\n", payload_sha, payload_name) < 0 ||
-        fprintf(fp, "%s  record.ini\n", record_sha) < 0) {
+    if (!tbl_fputs4_ok(fp, payload_sha, "  ", payload_name, "\n") ||
+        !tbl_fputs3_ok(fp, record_sha, "  record.ini", "\n")) {
         fclose(fp);
         tbl_export_seterr(err, errsz, "manifest write error");
         return 2;

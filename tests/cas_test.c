@@ -27,7 +27,7 @@ static int mk_tmp_base(char *out, size_t outsz)
     if (!out || outsz == 0) return 0;
     out[0] = '\0';
 
-    if (!tbl_u32_to_dec(tbl_fs_pid_u32(), num, sizeof(num))) return 0;
+    if (!tbl_u32_to_dec_ok(tbl_fs_pid_u32(), num, sizeof(num))) return 0;
 
     if (tbl_strlcpy(out, "tests_tmp_tablinum_", outsz) >= outsz) return 0;
     if (tbl_strlcat(out, num, outsz) >= outsz) return 0;

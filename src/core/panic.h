@@ -16,13 +16,23 @@ void tbl_panic(const char *file, int line, const char *msg);
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "core/safe.h"
 
 void tbl_panic(const char *file, int line, const char *msg)
 {
     if (!file) file = "?";
     if (!msg)  msg  = "panic";
 
-    fprintf(stderr, "tablinum: PANIC at %s:%d: %s\n", file, line, msg);
+    {
+        char nbuf[32];
+        unsigned long ln;
+        ln = (line < 0) ? 0UL : (unsigned long)line;
+        if (!tbl_ul_to_dec_ok(ln, nbuf, sizeof(nbuf))) {
+            (void)tbl_strlcpy(nbuf, "0", sizeof(nbuf));
+        }
+        (void)tbl_fputs5_ok(stderr, "tablinum: PANIC at ", file, ":", nbuf, ": ");
+        (void)tbl_fputs2_ok(stderr, msg, "\n");
+    }
     fflush(stderr);
     abort();
 }

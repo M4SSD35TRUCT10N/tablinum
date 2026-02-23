@@ -73,7 +73,7 @@ static int tbl_verify_hash_file(const char *path, char *out_hex, size_t out_hex_
     fclose(fp);
     tbl_sha256_final(&st, dig);
 
-    if (!tbl_sha256_hex(dig, out_hex, out_hex_sz)) {
+    if (!tbl_sha256_hex_ok(dig, out_hex, out_hex_sz)) {
         tbl_verify_seterr(err, errsz, "hex buffer too small");
         return 2;
     }

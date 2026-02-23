@@ -23,7 +23,7 @@ static int hash_str(const char *s, char *hex, size_t hexsz)
         tbl_sha256_update(&st, "", 0);
     }
     tbl_sha256_final(&st, dig);
-    return tbl_sha256_hex(dig, hex, hexsz);
+    return tbl_sha256_hex_ok(dig, hex, hexsz);
 }
 
 int main(void)

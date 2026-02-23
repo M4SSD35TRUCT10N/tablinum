@@ -22,7 +22,7 @@ static int mk_tmp_base(char *out, size_t outsz)
     if (!out || outsz == 0) return 0;
     out[0] = '\0';
 
-    if (!tbl_u32_to_dec(tbl_fs_pid_u32(), num, sizeof(num))) return 0;
+    if (!tbl_u32_to_dec_ok(tbl_fs_pid_u32(), num, sizeof(num))) return 0;
 
     if (tbl_strlcpy(out, "tests_tmp_tablinum_", outsz) >= outsz) return 0;
     if (tbl_strlcat(out, num, outsz) >= outsz) return 0;
@@ -55,7 +55,7 @@ int main(void)
     err[0] = '\0';
     rc = tbl_spool_init(&sp, spool_root, err, sizeof(err));
     if (rc != TBL_SPOOL_OK) {
-        fprintf(stderr, "spool_init failed: %s\n", err);
+        fputs("spool_init failed: ", stderr); fputs(err, stderr); fputc('\n', stderr);
     }
     T_ASSERT(rc == TBL_SPOOL_OK);
 
@@ -68,7 +68,7 @@ int main(void)
     name[0] = '\0';
     rc = tbl_spool_claim_next(&sp, name, sizeof(name), err, sizeof(err));
     if (rc != TBL_SPOOL_OK) {
-        fprintf(stderr, "claim_next failed: %s\n", err);
+        fputs("claim_next failed: ", stderr); fputs(err, stderr); fputc('\n', stderr);
     }
     T_ASSERT(rc == TBL_SPOOL_OK);
     T_ASSERT(strcmp(name, "job1.txt") == 0);
@@ -87,7 +87,7 @@ int main(void)
     err[0] = '\0';
     rc = tbl_spool_commit_out(&sp, "job1.txt", err, sizeof(err));
     if (rc != TBL_SPOOL_OK) {
-        fprintf(stderr, "commit_out failed: %s\n", err);
+        fputs("commit_out failed: ", stderr); fputs(err, stderr); fputc('\n', stderr);
     }
     T_ASSERT(rc == TBL_SPOOL_OK);
 

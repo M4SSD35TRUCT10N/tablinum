@@ -5,6 +5,14 @@
 
 #include "core/version.h"
 
+/* Stable exit codes (OpenBSD-style). */
+#define TBL_EXIT_OK        0
+#define TBL_EXIT_USAGE     2
+#define TBL_EXIT_NOTFOUND  3
+#define TBL_EXIT_IO        4
+#define TBL_EXIT_INTEGRITY 5
+#define TBL_EXIT_SCHEMA    6
+
 /* Roles */
 typedef enum tbl_role_e {
     TBL_ROLE_ALL = 0,
@@ -14,7 +22,10 @@ typedef enum tbl_role_e {
     TBL_ROLE_WORKER,
     TBL_ROLE_VERIFY,
     TBL_ROLE_EXPORT,
-    TBL_ROLE_PACKAGE
+    TBL_ROLE_PACKAGE,
+    TBL_ROLE_VERIFY_PACKAGE,
+    TBL_ROLE_INGEST_PACKAGE,
+    TBL_ROLE_VERIFY_AUDIT
 } tbl_role_t;
 
 /* Packaging kinds (E-ARK inspired, OAIS-light). */
@@ -28,9 +39,10 @@ typedef struct tbl_app_config_s {
     const char *config_path; /* INI path */
     tbl_role_t role;         /* selected role */
 
-    /* Optional positional args (used by verify/export roles) */
-    const char *jobid;       /* verify/export: job id (job directory name) */
-    const char *out_dir;     /* export: output directory */
+    /* Optional positional args */
+    const char *jobid;       /* verify/export/package: job id (job directory name) */
+    const char *out_dir;     /* export/package: output directory */
+    const char *pkg_dir;     /* verify-package/ingest-package: package directory */
 
     /* package: AIP/SIP kind */
     tbl_pkg_kind_t pkg_kind;

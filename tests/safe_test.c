@@ -22,11 +22,11 @@ int main(void)
     (void)tbl_strlcat(buf, "bb", sizeof(buf));
     T_ASSERT(strcmp(buf, "aabb") == 0);
 
-    T_ASSERT(tbl_parse_u32("4294967295", &v) == 1);
+    T_ASSERT(tbl_parse_u32_ok("4294967295", &v) == 1);
     T_ASSERT(v == 4294967295UL);
-    T_ASSERT(tbl_parse_u32("4294967296", &v) == 0);
-    T_ASSERT(tbl_parse_u32("12x", &v) == 0);
-    T_ASSERT(tbl_parse_u32("", &v) == 0);
+    T_ASSERT(tbl_parse_u32_ok("4294967296", &v) == 0);
+    T_ASSERT(tbl_parse_u32_ok("12x", &v) == 0);
+    T_ASSERT(tbl_parse_u32_ok("", &v) == 0);
 
         T_OK();
 }

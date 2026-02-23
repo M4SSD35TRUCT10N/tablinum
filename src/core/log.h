@@ -2,6 +2,7 @@
 #define TBL_CORE_LOG_H
 
 #include <stdarg.h>
+#include "core/safe.h"
 
 typedef enum tbl_log_level_e {
     TBL_LOG_ERROR = 0,
@@ -21,6 +22,7 @@ void tbl_vlogf(tbl_log_level_t lvl, const char *fmt, va_list ap);
 #ifdef TBL_LOG_IMPLEMENTATION
 
 #include <stdio.h>
+#include "core/safe.h"
 
 static tbl_log_level_t g_tbl_log_level = TBL_LOG_INFO;
 static FILE *g_tbl_log_fp = NULL;
@@ -58,10 +60,10 @@ void tbl_vlogf(tbl_log_level_t lvl, const char *fmt, va_list ap)
 
     if (!fmt) fmt = "";
 
-    fprintf(fp, "[%s] ", tbl_log_level_str(lvl));
-    vfprintf(fp, fmt, ap);
-    fprintf(fp, "\n");
-    fflush(fp);
+        (void)tbl_fputs3_ok(fp, "[", tbl_log_level_str(lvl), "] ");
+    (void)tbl_vfprintf_ok(fp, fmt, ap);
+        (void)tbl_fputc_ok(fp, '\n');
+    (void)tbl_fflush_ok(fp);
 }
 
 void tbl_logf(tbl_log_level_t lvl, const char *fmt, ...)

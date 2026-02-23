@@ -72,7 +72,7 @@ static int tbl_cas_hash_file(const char *path, char *out_hex, size_t out_hex_sz,
     fclose(fp);
     tbl_sha256_final(&st, dig);
 
-    if (!tbl_sha256_hex(dig, out_hex, out_hex_sz)) {
+    if (!tbl_sha256_hex_ok(dig, out_hex, out_hex_sz)) {
         tbl_cas_seterr(err, errsz, "hex buffer too small");
         return 1;
     }
@@ -215,7 +215,7 @@ int tbl_cas_put_file(const char *repo_root, const char *src_path,
         }
         {
             char num[16];
-            if (!tbl_u32_to_dec(tbl_fs_pid_u32(), num, sizeof(num))) {
+            if (!tbl_u32_to_dec_ok(tbl_fs_pid_u32(), num, sizeof(num))) {
                 tbl_cas_seterr(err, errsz, "pid conv failed");
                 return 1;
             }

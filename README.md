@@ -1,18 +1,15 @@
 # Tablinum
 
-**DE:** Tablinum ist ein strikt in C89 geschriebenes, portables *Document Hub* (paperless‑ähnlich) als **Single‑Binary**.  
+Tablinum ist ein strikt in C89 geschriebenes, portables *Document Hub* (paperless‑ähnlich) als **Single‑Binary**.  
 Ziel: langlebige, in Jahrzehnten noch kompilier- und lesbare Dokumentenablage (Windows, Linux/RPi, 9front) mit **fail‑fast** und sicherem C‑Stil. Build/Test laufen über **tack**.
 
-**EN:** Tablinum is a strict C89, portable *document hub* (paperless‑style) as a **single binary**.  
+Tablinum is a strict C89, portable *document hub* (paperless‑style) as a **single binary**.  
 Goal: a durable document store that can still be compiled and read decades from now (Windows, Linux/RPi, 9front), using a **fail‑fast** secure C style. Build/tests are driven by **tack**.
 
-## Quick start
+## Schnellstart / Quick start
 
-> **DE:** Aktuell ist der Kern‑Workflow **ingest / verify / export** implementiert.
-> Andere Rollen sind Platzhalter und schlagen derzeit fail‑fast mit „not implemented yet“ fehl.
->
-> **EN:** At this stage, the implemented core workflow is **ingest / verify / export**.
-> Other roles are placeholders and currently fail-fast with “not implemented yet”.
+> **DE:** Aktuell ist der Kern‑Workflow **ingest / verify / export** implementiert. Andere Rollen sind Platzhalter und schlagen derzeit fail‑fast mit „not implemented yet“ fehl.  
+> **EN:** At this stage, the implemented core workflow is **ingest / verify / export**. Other roles are placeholders and currently fail-fast with “not implemented yet”.
 
 ```sh
 # show CLI help
@@ -29,6 +26,15 @@ tablinum export JOBID ./export_dir
 
 # package as E-ARK inspired folder structure (OAIS-light)
 tablinum package JOBID ./aip_dir --format aip
+
+# verify a package (strict schema + fixity)
+tablinum verify-package ./aip_dir
+
+# import a package back into a repo
+tablinum ingest-package ./aip_dir --config tablinum.ini
+
+# verify ops audit hash-chain
+tablinum verify-audit --config tablinum.ini
 ```
 
 ---
@@ -45,7 +51,9 @@ Im übertragenen Sinn ist Tablinum genau das: ein „repräsentativer Knotenpunk
 
 ### Status
 
-Frühe Bootstrap‑Phase (aber schon funktionsfähig für den Kern‑Workflow):
+Frühe Bootstrap‑Phase (aber schon funktionsfähig für den Kern‑Workflow).
+
+Referenz v1 (Packaging-Strictness) ist in `docs/REFERENCE.md` definiert.
 
 - strikte C89‑Core‑Utilities (`str`, `safe`, `path`, …)
 - robuste Spool/Claim‑Queue (Job‑Verzeichnisse)
@@ -54,10 +62,13 @@ Frühe Bootstrap‑Phase (aber schon funktionsfähig für den Kern‑Workflow):
 - CAS: Payload wird in `repo/sha256/<ab>/<rest>` abgelegt
 - Durable Records: `repo/records/<jobid>.ini`
 - Audit‑Trail: append‑only `repo/events.log`
+- Ops-Audit: tamper-evident `repo/audit/ops.log` (hash-chain)
 - Verify: `tablinum verify <jobid>` (recompute + compare)
 - Export: `tablinum export <jobid> <dir>` (DIP‑light: `payload.bin`, `record.ini`, `manifest-sha256.txt`)
 - Package: `tablinum package <jobid> <dir> [--format aip|sip]` (E-ARK‑inspiriert: `metadata/` + `representations/`)
-
+- Verify-Package: `tablinum verify-package <pkgdir>` (strict schema + fixity)
+- Ingest-Package: `tablinum ingest-package <pkgdir>` (Roundtrip-Import)
+- Verify-Audit: `tablinum verify-audit` (prüft Hash-Kette im Ops-Audit)
 
 ### Ziele
 
@@ -76,7 +87,6 @@ Frühe Bootstrap‑Phase (aber schon funktionsfähig für den Kern‑Workflow):
 ### Konfiguration
 
 Eine minimale Beispiel‑Konfiguration:
-
 - `tablinum.ini.example`
 
 Lokale Config anlegen:
@@ -101,8 +111,6 @@ tack test release -j 8
 
 ### Version
 
-Version anzeigen:
-
 ```bat
 tablinum --version
 ```
@@ -110,8 +118,6 @@ tablinum --version
 ### Starten
 
 #### Ingest (Spool‑Queue)
-
-Start:
 
 ```bat
 tablinum --config tablinum.ini --role ingest
@@ -135,6 +141,18 @@ tablinum export JOBID OUTDIR --config tablinum.ini
 tablinum package JOBID OUTDIR --format aip --config tablinum.ini
 ```
 
+#### Verify-Package (strict schema + fixity)
+
+```bat
+tablinum verify-package OUTDIR
+```
+
+#### Ingest-Package (Roundtrip-Import)
+
+```bat
+tablinum ingest-package OUTDIR --config tablinum.ini
+```
+
 Jobs in die Inbox legen:
 
 ```bat
@@ -149,12 +167,10 @@ echo fail  > spool\inbox\job2\payload.bin
 ```
 
 Verhalten:
-
 - `job1/` wird geclaimt, verarbeitet und im Repository als CAS + `records/<jobid>.ini` + `events.log` abgelegt; danach nach `spool/out/` verschoben
 - `job2/` wird nach `spool/fail/` verschoben
 
 Spool‑Layout:
-
 - `spool/inbox/`  – neue Jobs
 - `spool/claim/`  – geclaimt (in Arbeit)
 - `spool/out/`    – erfolgreich verarbeitet
@@ -174,7 +190,9 @@ In that sense, Tablinum is a controlled “hub” between the entrance (ingest) 
 
 ### Status
 
-Early bootstrap phase (but the core workflow already works):
+Early bootstrap phase (but the core workflow already works).
+
+Reference v1 (packaging strictness) is defined in `docs/REFERENCE.md`.
 
 - strict C89 core utilities (`str`, `safe`, `path`, ...)
 - robust spool/claim queue (job directories)
@@ -183,9 +201,13 @@ Early bootstrap phase (but the core workflow already works):
 - CAS: payload stored as `repo/sha256/<ab>/<rest>`
 - durable records: `repo/records/<jobid>.ini`
 - audit trail: append‑only `repo/events.log`
+- ops audit: tamper-evident `repo/audit/ops.log` (hash-chain)
 - verify: `tablinum verify <jobid>` (recompute + compare)
 - export: `tablinum export <jobid> <dir>` (DIP‑light: `payload.bin`, `record.ini`, `manifest-sha256.txt`)
 - package: `tablinum package <jobid> <dir> [--format aip|sip]` (E-ARK inspired: `metadata/` + `representations/`)
+- verify-package: `tablinum verify-package <pkgdir>` (strict schema + fixity)
+- ingest-package: `tablinum ingest-package <pkgdir>` (roundtrip import)
+- verify-audit: `tablinum verify-audit` (verifies ops audit hash-chain)
 
 ### Goals
 
@@ -204,7 +226,6 @@ Early bootstrap phase (but the core workflow already works):
 ### Configuration
 
 A minimal example config is provided:
-
 - `tablinum.ini.example`
 
 Create your local config:
@@ -229,8 +250,6 @@ tack test release -j 8
 
 ### Version
 
-Show version:
-
 ```bat
 tablinum --version
 ```
@@ -238,8 +257,6 @@ tablinum --version
 ### Run
 
 #### Ingest (spool queue)
-
-Start ingest:
 
 ```bat
 tablinum --config tablinum.ini --role ingest
@@ -263,6 +280,18 @@ tablinum export JOBID OUTDIR --config tablinum.ini
 tablinum package JOBID OUTDIR --format aip --config tablinum.ini
 ```
 
+#### Verify-Package (strict schema + fixity)
+
+```bat
+tablinum verify-package OUTDIR
+```
+
+#### Ingest-Package (roundtrip import)
+
+```bat
+tablinum ingest-package OUTDIR --config tablinum.ini
+```
+
 Drop files into the inbox:
 
 ```bat
@@ -277,12 +306,10 @@ echo fail  > spool\inbox\job2\payload.bin
 ```
 
 Behavior:
-
 - `job1/` will be claimed, processed and recorded as CAS + `records/<jobid>.ini` + `events.log`; then moved to `spool/out/`
 - `job2/` will be moved to `spool/fail/`
 
 Spool layout:
-
 - `spool/inbox/`  – new jobs
 - `spool/claim/`  – claimed (in‑progress)
 - `spool/out/`    – processed successfully

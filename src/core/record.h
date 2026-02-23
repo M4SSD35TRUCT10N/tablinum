@@ -31,6 +31,9 @@ int tbl_record_write_repo(const char *repo_root, const tbl_record_t *rec, char *
 /* Read record from repo path. Returns 0 on success. */
 int tbl_record_read_repo(const char *repo_root, const char *jobid, tbl_record_t *out_rec, char *err, size_t errsz);
 
+/* Read record from an explicit file path (used by package verify/ingest). Returns 0 on success. */
+int tbl_record_read_file(const char *path, tbl_record_t *out_rec, char *err, size_t errsz);
+
 #ifdef TBL_RECORD_IMPLEMENTATION
 
 #include <stdio.h>
@@ -134,7 +137,7 @@ static int tbl_record_write_path(const char *path, const tbl_record_t *rec, char
         }
     }
 
-    if (!tbl_u32_to_dec((unsigned long)rec->bytes, num, sizeof(num))) {
+    if (!tbl_u32_to_dec_ok((unsigned long)rec->bytes, num, sizeof(num))) {
         tbl_record_seterr(err, errsz, "bytes conv failed");
         return 2;
     }
@@ -145,7 +148,7 @@ static int tbl_record_write_path(const char *path, const tbl_record_t *rec, char
         return 2;
     }
 
-    if (!tbl_u32_to_dec((unsigned long)rec->stored_at, num, sizeof(num))) {
+    if (!tbl_u32_to_dec_ok((unsigned long)rec->stored_at, num, sizeof(num))) {
         tbl_record_seterr(err, errsz, "stored_at conv failed");
         return 2;
     }
@@ -303,6 +306,64 @@ int tbl_record_read_repo(const char *repo_root, const char *jobid, tbl_record_t 
     fclose(fp);
 
     /* Minimal validation */
+    if (out_rec->status[0] == '\0') (void)tbl_strlcpy(out_rec->status, "unknown", sizeof(out_rec->status));
+    return 0;
+}
+
+int tbl_record_read_file(const char *path, tbl_record_t *out_rec, char *err, size_t errsz)
+{
+    FILE *fp;
+    char line[512];
+
+    if (err && errsz) err[0] = '\0';
+    if (!path || !path[0] || !out_rec) {
+        tbl_record_seterr(err, errsz, "invalid args");
+        return 2;
+    }
+
+    fp = fopen(path, "rb");
+    if (!fp) {
+        tbl_record_seterr(err, errsz, "cannot open record");
+        return 2;
+    }
+
+    tbl_record_init(out_rec);
+
+    while (fgets(line, (int)sizeof(line), fp)) {
+        char *eq;
+        char *key;
+        char *val;
+
+        tbl_record_trim(line);
+        if (line[0] == '\0') continue;
+        if (line[0] == '#') continue;
+
+        eq = strchr(line, '=');
+        if (!eq) continue;
+
+        *eq = '\0';
+        key = line;
+        val = eq + 1;
+
+        if (strcmp(key, "status") == 0) {
+            (void)tbl_strlcpy(out_rec->status, val, sizeof(out_rec->status));
+        } else if (strcmp(key, "job") == 0) {
+            (void)tbl_strlcpy(out_rec->job, val, sizeof(out_rec->job));
+        } else if (strcmp(key, "payload") == 0) {
+            (void)tbl_strlcpy(out_rec->payload, val, sizeof(out_rec->payload));
+        } else if (strcmp(key, "sha256") == 0) {
+            (void)tbl_strlcpy(out_rec->sha256, val, sizeof(out_rec->sha256));
+        } else if (strcmp(key, "bytes") == 0) {
+            (void)tbl_record_parse_ul(val, &out_rec->bytes);
+        } else if (strcmp(key, "stored_at") == 0) {
+            (void)tbl_record_parse_ul(val, &out_rec->stored_at);
+        } else if (strcmp(key, "reason") == 0) {
+            (void)tbl_strlcpy(out_rec->reason, val, sizeof(out_rec->reason));
+        }
+    }
+
+    fclose(fp);
+
     if (out_rec->status[0] == '\0') (void)tbl_strlcpy(out_rec->status, "unknown", sizeof(out_rec->status));
     return 0;
 }

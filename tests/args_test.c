@@ -111,6 +111,47 @@ static int test_package_subcmd_format_sip(void)
     return 0;
 }
 
+
+static int test_verify_package_subcmd(void)
+{
+    tbl_app_config_t app;
+    char *argv6[] = { (char*)"tablinum", (char*)"verify-package", (char*)"pkgdir" };
+    int rc = tbl_args_parse(3, argv6, &app);
+
+    T_ASSERT_EQ_INT(rc, 0);
+    T_ASSERT_EQ_INT(app.role, TBL_ROLE_VERIFY_PACKAGE);
+    T_ASSERT(app.pkg_dir != NULL);
+    T_ASSERT_STREQ(app.pkg_dir, "pkgdir");
+    return 0;
+}
+
+static int test_ingest_package_subcmd(void)
+{
+    tbl_app_config_t app;
+    char *argv7[] = { (char*)"tablinum", (char*)"ingest-package", (char*)"pkgdir", (char*)"--config", (char*)"c.ini" };
+    int rc = tbl_args_parse(5, argv7, &app);
+
+    T_ASSERT_EQ_INT(rc, 0);
+    T_ASSERT_EQ_INT(app.role, TBL_ROLE_INGEST_PACKAGE);
+    T_ASSERT(app.pkg_dir != NULL);
+    T_ASSERT_STREQ(app.pkg_dir, "pkgdir");
+    T_ASSERT_STREQ(app.config_path, "c.ini");
+    return 0;
+}
+
+static int test_verify_audit_subcmd(void)
+{
+    tbl_app_config_t app;
+    char *argv8[] = { (char*)"tablinum", (char*)"verify-audit", (char*)"--config", (char*)"c.ini" };
+    int rc = tbl_args_parse(4, argv8, &app);
+
+    T_ASSERT_EQ_INT(rc, 0);
+    T_ASSERT_EQ_INT(app.role, TBL_ROLE_VERIFY_AUDIT);
+    T_ASSERT_STREQ(app.config_path, "c.ini");
+    return 0;
+}
+
+
 int main(void)
 {
     /*T_ASSERT(test_defaults() == 0);*/
@@ -120,5 +161,8 @@ int main(void)
     T_ASSERT(test_export_subcmd() == 0);
     T_ASSERT(test_package_subcmd_default_format() == 0);
     T_ASSERT(test_package_subcmd_format_sip() == 0);
+    T_ASSERT(test_verify_package_subcmd() == 0);
+    T_ASSERT(test_ingest_package_subcmd() == 0);
+    T_ASSERT(test_verify_audit_subcmd() == 0);
     T_OK();
 }
