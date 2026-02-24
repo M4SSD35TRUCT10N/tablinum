@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{TACK_PAGE_TITLE}}</title>
+  <!-- TACK:BEGIN HEAD_ASSETS -->
+  {{TACK_HEAD_ASSETS}}
+  <!-- TACK:END HEAD_ASSETS -->
+</head>
+<body>
+<header>
+  <div class="row">
+    <div class="brand">{{TACK_PROJECT_TITLE}}</div>
+    <div class="spacer"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- TACK:BEGIN NAV -->
+  {{TACK_NAV_HTML}}
+  <!-- TACK:END NAV -->
+
+  <article>
+    <!-- TACK:BEGIN TOC -->
+    {{TACK_TOC_HTML}}
+    <!-- TACK:END TOC -->
+
+    <!-- TACK:BEGIN CONTENT -->
+    {{TACK_CONTENT_HTML}}
+    <!-- TACK:END CONTENT -->
+  </article>
+</main>
+
+<!-- TACK:BEGIN FOOTER -->
+{{TACK_FOOTER_HTML}}
+<!-- TACK:END FOOTER -->
+</body>
+</html>
